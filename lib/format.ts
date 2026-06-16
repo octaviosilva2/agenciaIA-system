@@ -1,86 +1,167 @@
 /**
- * Labels, badges e formatação PT-BR para enums do sistema.
- * Fonte única de verdade para textos de UI — nunca usar strings soltas.
+ * Fonte única de labels PT-BR, cores de badge e formatação de número/data.
+ * A UI NUNCA escreve label ou classe de cor de status solta — sempre via este módulo.
+ * Cores e tons saem de docs/06-design-system.md (§6) e do frontend-teste/style-guide.html.
  */
 
-// --- Estágios do funil ---
-export const DEAL_STAGE_LABELS: Record<string, string> = {
-  prospect: 'Prospect',
-  lead: 'Lead',
-  diagnostico: 'Diagnóstico',
-  oportunidade: 'Oportunidade',
-  escopo: 'Escopo',
-  proposta: 'Proposta',
-  negociacao: 'Negociação',
-  fechado: 'Fechado',
-  perdido: 'Perdido',
-  reativar_futuramente: 'Reativar Futuramente',
-  desqualificado: 'Desqualificado',
+import type { Database } from '@/lib/supabase/types'
+import type { ContactStatus } from '@/lib/rules/contact-status'
+
+type Enums = Database['public']['Enums']
+
+/** Metadados de um badge: rótulo PT-BR + classes de cor (claro+escuro embutidos). */
+export type BadgeMeta = { label: string; className: string }
+
+// --- Tons reutilizáveis (design system §6.1) ---
+export type Tone =
+  | 'green'
+  | 'amber'
+  | 'red'
+  | 'blue'
+  | 'indigo'
+  | 'zinc'
+  | 'zinc-faint'
+  | 'outline'
+  | 'slate-soft'
+  | 'slate-mid'
+
+export const TONE: Record<Tone, string> = {
+  green: 'bg-green-100 text-green-700 dark:bg-green-500/15 dark:text-green-400',
+  amber: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400',
+  red: 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-400',
+  blue: 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400',
+  indigo: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-400',
+  zinc: 'bg-zinc-100 text-zinc-500 dark:bg-zinc-500/15 dark:text-zinc-400',
+  'zinc-faint': 'bg-zinc-100 text-zinc-400 dark:bg-zinc-500/15 dark:text-zinc-500',
+  outline: 'border border-zinc-300 text-zinc-600 dark:border-zinc-700 dark:text-zinc-300',
+  'slate-soft': 'bg-slate-100 text-slate-700 dark:bg-slate-500/15 dark:text-slate-300',
+  'slate-mid': 'bg-slate-200 text-slate-700 dark:bg-slate-500/20 dark:text-slate-300',
 }
 
-export const DEAL_STAGE_COLORS: Record<string, string> = {
-  prospect: 'bg-slate-100 text-slate-700',
-  lead: 'bg-blue-100 text-blue-700',
-  diagnostico: 'bg-cyan-100 text-cyan-700',
-  oportunidade: 'bg-violet-100 text-violet-700',
-  escopo: 'bg-indigo-100 text-indigo-700',
-  proposta: 'bg-purple-100 text-purple-700',
-  negociacao: 'bg-amber-100 text-amber-700',
-  fechado: 'bg-emerald-100 text-emerald-700',
-  perdido: 'bg-red-100 text-red-700',
-  reativar_futuramente: 'bg-orange-100 text-orange-700',
-  desqualificado: 'bg-zinc-100 text-zinc-500',
+// --- Estágios do funil (deal_stage) ---
+// Ativos: escala slate (tom único, intensidade crescente — design system §6.1).
+// Terminais: green/red/amber/zinc-faint.
+export const DEAL_STAGE: Record<Enums['deal_stage'], BadgeMeta> = {
+  prospect: {
+    label: 'Prospect',
+    className: 'bg-slate-100 text-slate-600 dark:bg-slate-500/10 dark:text-slate-400',
+  },
+  lead: {
+    label: 'Lead',
+    className: 'bg-slate-100 text-slate-700 dark:bg-slate-500/15 dark:text-slate-300',
+  },
+  diagnostico: {
+    label: 'Diagnóstico',
+    className: 'bg-slate-200 text-slate-700 dark:bg-slate-500/20 dark:text-slate-300',
+  },
+  oportunidade: {
+    label: 'Oportunidade',
+    className: 'bg-slate-200 text-slate-800 dark:bg-slate-500/25 dark:text-slate-200',
+  },
+  escopo: {
+    label: 'Escopo',
+    className: 'bg-slate-300 text-slate-800 dark:bg-slate-400/25 dark:text-slate-200',
+  },
+  proposta: {
+    label: 'Proposta',
+    className: 'bg-slate-300 text-slate-900 dark:bg-slate-400/30 dark:text-slate-100',
+  },
+  negociacao: {
+    label: 'Negociação',
+    className: 'bg-slate-400 text-slate-900 dark:bg-slate-400/40 dark:text-slate-100',
+  },
+  fechado: { label: 'Fechado', className: TONE.green },
+  perdido: { label: 'Perdido', className: TONE.red },
+  reativar_futuramente: { label: 'Reativar', className: TONE.amber },
+  desqualificado: { label: 'Desqualificado', className: TONE['zinc-faint'] },
 }
 
-// --- Status de projeto ---
-export const PROJECT_STATUS_LABELS: Record<string, string> = {
-  a_iniciar: 'A Iniciar',
-  briefing: 'Briefing',
-  desenvolvimento: 'Desenvolvimento',
-  revisao: 'Revisão',
-  entregue: 'Entregue',
+// --- Estado derivado do contato (não é enum do banco — vem de lib/rules/contact-status) ---
+export const CONTACT_STATUS: Record<ContactStatus, BadgeMeta> = {
+  em_negociacao: { label: 'Em negociação', className: TONE.blue },
+  cliente_ativo: { label: 'Cliente ativo', className: TONE.green },
+  reativar: { label: 'Reativar', className: TONE.amber },
+  perdido: { label: 'Perdido', className: TONE.red },
+  inativo: { label: 'Inativo', className: TONE.zinc },
+  contato: { label: 'Contato', className: TONE.outline },
 }
 
-export const PROJECT_STATUS_COLORS: Record<string, string> = {
-  a_iniciar: 'bg-slate-100 text-slate-700',
-  briefing: 'bg-blue-100 text-blue-700',
-  desenvolvimento: 'bg-amber-100 text-amber-700',
-  revisao: 'bg-purple-100 text-purple-700',
-  entregue: 'bg-emerald-100 text-emerald-700',
+// --- Status de projeto (project_status) ---
+export const PROJECT_STATUS: Record<Enums['project_status'], BadgeMeta> = {
+  a_iniciar: { label: 'A iniciar', className: TONE.zinc },
+  briefing: { label: 'Briefing', className: TONE['slate-soft'] },
+  desenvolvimento: { label: 'Desenvolvimento', className: TONE.blue },
+  revisao: { label: 'Revisão', className: TONE.amber },
+  entregue: { label: 'Entregue', className: TONE.green },
 }
 
-// --- Status de tarefa ---
-export const TASK_STATUS_LABELS: Record<string, string> = {
-  analisar: 'Analisar',
-  todo: 'To-do',
-  doing: 'Doing',
-  impedimento: 'Impedimento',
-  done: 'Done',
+// --- Status de tarefa (task_status) ---
+export const TASK_STATUS: Record<Enums['task_status'], BadgeMeta> = {
+  analisar: { label: 'Analisar', className: TONE.zinc },
+  todo: { label: 'To-do', className: TONE['slate-soft'] },
+  doing: { label: 'Doing', className: TONE.blue },
+  impedimento: { label: 'Impedimento', className: TONE.red },
+  done: { label: 'Concluída', className: TONE.green },
 }
 
-export const TASK_STATUS_COLORS: Record<string, string> = {
-  analisar: 'bg-slate-100 text-slate-700',
-  todo: 'bg-blue-100 text-blue-700',
-  doing: 'bg-amber-100 text-amber-700',
-  impedimento: 'bg-red-100 text-red-700',
-  done: 'bg-emerald-100 text-emerald-700',
+// --- Prioridade de tarefa (task_priority) ---
+export const TASK_PRIORITY: Record<Enums['task_priority'], BadgeMeta> = {
+  urgente: { label: 'Urgente', className: TONE.red },
+  proximo: { label: 'Próximo', className: TONE.amber },
+  futuro: { label: 'Futuro', className: TONE.zinc },
 }
 
-// --- Prioridade de tarefa ---
-export const TASK_PRIORITY_LABELS: Record<string, string> = {
-  urgente: 'Urgente',
-  proximo: 'Próximo',
-  futuro: 'Futuro',
+// --- Tipo de compromisso NCT (commitment_type) ---
+export const COMMITMENT_TYPE: Record<Enums['commitment_type'], BadgeMeta> = {
+  think_it: { label: 'Think-It', className: TONE.indigo },
+  build_it: { label: 'Build-It', className: TONE.amber },
+  launch_it: { label: 'Launch-It', className: TONE.green },
+  quantitativo: { label: 'Quantitativo', className: TONE['slate-mid'] },
 }
 
-export const TASK_PRIORITY_COLORS: Record<string, string> = {
-  urgente: 'bg-red-100 text-red-700',
-  proximo: 'bg-amber-100 text-amber-700',
-  futuro: 'bg-slate-100 text-slate-500',
+// --- Status de cobrança (charge_status) — reusado em accounts_payable ---
+export const CHARGE_STATUS: Record<Enums['charge_status'], BadgeMeta> = {
+  pendente: { label: 'Pendente', className: TONE.amber },
+  pago: { label: 'Pago', className: TONE.green },
+  cancelado: { label: 'Cancelado', className: TONE['zinc-faint'] },
 }
 
-// --- Área da tarefa ---
-export const TASK_AREA_LABELS: Record<string, string> = {
+/**
+ * Badge derivado "Vencido": charge pendente com vencimento no passado.
+ * Não é valor de enum — calculado na query/UI via isOverdue.
+ */
+export const CHARGE_OVERDUE: BadgeMeta = { label: 'Vencido', className: TONE.red }
+
+// --- Confiança (confidence_level) — ponto colorido, não badge (design system §6.2) ---
+export const CONFIDENCE_DOT: Record<Enums['confidence_level'], string> = {
+  alta: 'bg-green-500',
+  media: 'bg-amber-500',
+  baixa: 'bg-red-500',
+}
+
+// =====================================================================
+// Enums só-texto (sem badge colorido) — apenas o rótulo PT-BR.
+// =====================================================================
+
+export const CONFIDENCE_LABELS: Record<Enums['confidence_level'], string> = {
+  baixa: 'Baixa',
+  media: 'Média',
+  alta: 'Alta',
+}
+
+export const DEAL_URGENCY_LABELS: Record<Enums['deal_urgency'], string> = {
+  baixa: 'Baixa',
+  media: 'Média',
+  alta: 'Alta',
+}
+
+export const LEVEL_SCALE_LABELS: Record<Enums['level_scale'], string> = {
+  baixo: 'Baixo',
+  medio: 'Médio',
+  alto: 'Alto',
+}
+
+export const TASK_AREA_LABELS: Record<Enums['task_area'], string> = {
   gestao: 'Gestão',
   comercial: 'Comercial',
   operacional: 'Operacional',
@@ -88,102 +169,35 @@ export const TASK_AREA_LABELS: Record<string, string> = {
   sistema: 'Sistema',
 }
 
-// --- Urgência do deal ---
-export const DEAL_URGENCY_LABELS: Record<string, string> = {
-  baixa: 'Baixa',
-  media: 'Média',
-  alta: 'Alta',
-}
-
-// --- Escala (impact/effort) ---
-export const LEVEL_SCALE_LABELS: Record<string, string> = {
-  baixo: 'Baixo',
-  medio: 'Médio',
-  alto: 'Alto',
-}
-
-// --- Confiança ---
-export const CONFIDENCE_LABELS: Record<string, string> = {
-  baixa: 'Baixa',
-  media: 'Média',
-  alta: 'Alta',
-}
-
-export const CONFIDENCE_COLORS: Record<string, string> = {
-  baixa: 'text-red-500',
-  media: 'text-amber-500',
-  alta: 'text-emerald-500',
-}
-
-export const CONFIDENCE_DOT_COLORS: Record<string, string> = {
-  baixa: 'bg-red-500',
-  media: 'bg-amber-500',
-  alta: 'bg-emerald-500',
-}
-
-// --- Tipo de compromisso NCT ---
-export const COMMITMENT_TYPE_LABELS: Record<string, string> = {
-  think_it: 'Think-It',
-  build_it: 'Build-It',
-  launch_it: 'Launch-It',
-  quantitativo: 'Quantitativo',
-}
-
-export const COMMITMENT_TYPE_COLORS: Record<string, string> = {
-  think_it: 'bg-indigo-100 text-indigo-700',
-  build_it: 'bg-amber-100 text-amber-700',
-  launch_it: 'bg-emerald-100 text-emerald-700',
-  quantitativo: 'bg-slate-100 text-slate-600',
-}
-
-// --- Status de compromisso ---
-export const COMMITMENT_STATUS_LABELS: Record<string, string> = {
-  em_andamento: 'Em Andamento',
+export const COMMITMENT_STATUS_LABELS: Record<Enums['commitment_status'], string> = {
+  em_andamento: 'Em andamento',
   cumprido: 'Cumprido',
-  nao_cumprido: 'Não Cumprido',
+  nao_cumprido: 'Não cumprido',
 }
 
-// --- Status de narrativa ---
-export const NARRATIVE_STATUS_LABELS: Record<string, string> = {
+export const NARRATIVE_STATUS_LABELS: Record<Enums['narrative_status'], string> = {
   ativa: 'Ativa',
   concluida: 'Concluída',
   arquivada: 'Arquivada',
 }
 
-// --- Tipo de contrato ---
-export const CONTRACT_KIND_LABELS: Record<string, string> = {
+export const CONTRACT_KIND_LABELS: Record<Enums['contract_kind'], string> = {
   mensal: 'Mensal',
   avulso: 'Avulso',
 }
 
-// --- Status de contrato ---
-export const CONTRACT_STATUS_LABELS: Record<string, string> = {
+export const CONTRACT_STATUS_LABELS: Record<Enums['contract_status'], string> = {
   ativo: 'Ativo',
   encerrado: 'Encerrado',
 }
 
-// --- Tipo de cobrança ---
-export const CHARGE_KIND_LABELS: Record<string, string> = {
+export const CHARGE_KIND_LABELS: Record<Enums['charge_kind'], string> = {
   setup: 'Setup',
   recorrencia: 'Recorrência',
   avulso: 'Avulso',
 }
 
-// --- Status de cobrança ---
-export const CHARGE_STATUS_LABELS: Record<string, string> = {
-  pendente: 'Pendente',
-  pago: 'Pago',
-  cancelado: 'Cancelado',
-}
-
-export const CHARGE_STATUS_COLORS: Record<string, string> = {
-  pendente: 'bg-amber-100 text-amber-700',
-  pago: 'bg-emerald-100 text-emerald-700',
-  cancelado: 'bg-zinc-100 text-zinc-500',
-}
-
-// --- Método de pagamento ---
-export const CHARGE_METHOD_LABELS: Record<string, string> = {
+export const CHARGE_METHOD_LABELS: Record<Enums['charge_method'], string> = {
   pix: 'Pix',
   boleto: 'Boleto',
   cartao: 'Cartão',
@@ -191,8 +205,7 @@ export const CHARGE_METHOD_LABELS: Record<string, string> = {
   outro: 'Outro',
 }
 
-// --- Categoria contas a pagar ---
-export const PAYABLE_CATEGORY_LABELS: Record<string, string> = {
+export const PAYABLE_CATEGORY_LABELS: Record<Enums['payable_category'], string> = {
   infra: 'Infra',
   freela: 'Freela',
   ferramentas: 'Ferramentas',
@@ -200,8 +213,7 @@ export const PAYABLE_CATEGORY_LABELS: Record<string, string> = {
   outro: 'Outro',
 }
 
-// --- Tipo de atividade ---
-export const ACTIVITY_TYPE_LABELS: Record<string, string> = {
+export const ACTIVITY_TYPE_LABELS: Record<Enums['activity_type'], string> = {
   nota: 'Nota',
   reuniao: 'Reunião',
   ligacao: 'Ligação',
@@ -210,30 +222,11 @@ export const ACTIVITY_TYPE_LABELS: Record<string, string> = {
   outro: 'Outro',
 }
 
-// --- Estado derivado do contato ---
-export const CONTACT_STATUS_LABELS: Record<string, string> = {
-  em_negociacao: 'Em Negociação',
-  cliente_ativo: 'Cliente Ativo',
-  reativar: 'Reativar',
-  perdido: 'Perdido',
-  inativo: 'Inativo',
-  contato: 'Contato',
-}
+// =====================================================================
+// Helpers de número e data (pt-BR).
+// =====================================================================
 
-export const CONTACT_STATUS_COLORS: Record<string, string> = {
-  em_negociacao: 'bg-blue-100 text-blue-700',
-  cliente_ativo: 'bg-emerald-100 text-emerald-700',
-  reativar: 'bg-orange-100 text-orange-700',
-  perdido: 'bg-red-100 text-red-700',
-  inativo: 'bg-zinc-100 text-zinc-500',
-  contato: 'bg-slate-100 text-slate-600',
-}
-
-// --- Formatação de moeda e datas ---
-
-/**
- * Formata valor em reais (R$) no padrão PT-BR.
- */
+/** Formata valor em reais (R$) no padrão PT-BR. */
 export function formatCurrency(value: number | null | undefined): string {
   if (value == null) return 'R$ 0,00'
   return new Intl.NumberFormat('pt-BR', {
@@ -242,9 +235,7 @@ export function formatCurrency(value: number | null | undefined): string {
   }).format(value)
 }
 
-/**
- * Formata data no padrão dd/MM/yyyy.
- */
+/** Formata data no padrão dd/MM/yyyy. */
 export function formatDate(date: string | Date | null | undefined): string {
   if (!date) return '—'
   const d = typeof date === 'string' ? new Date(date) : date
@@ -255,9 +246,7 @@ export function formatDate(date: string | Date | null | undefined): string {
   }).format(d)
 }
 
-/**
- * Formata data e hora no padrão dd/MM/yyyy HH:mm.
- */
+/** Formata data e hora no padrão dd/MM/yyyy HH:mm. */
 export function formatDateTime(date: string | Date | null | undefined): string {
   if (!date) return '—'
   const d = typeof date === 'string' ? new Date(date) : date
@@ -268,4 +257,44 @@ export function formatDateTime(date: string | Date | null | undefined): string {
     hour: '2-digit',
     minute: '2-digit',
   }).format(d)
+}
+
+/**
+ * Indica se uma data de vencimento está no passado (atrasada).
+ * Compara só a data (zera horas) — vence "ontem ou antes" = true.
+ */
+export function isOverdue(date: string | Date | null | undefined): boolean {
+  if (!date) return false
+  const due = typeof date === 'string' ? new Date(date) : new Date(date.getTime())
+  due.setHours(0, 0, 0, 0)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return due.getTime() < today.getTime()
+}
+
+/**
+ * Dias entre hoje e a data: futuro positivo, passado negativo, hoje = 0.
+ * null quando não há data. Compara só a data (zera horas).
+ */
+export function daysUntil(date: string | Date | null | undefined): number | null {
+  if (!date) return null
+  const due = typeof date === 'string' ? new Date(date) : new Date(date.getTime())
+  due.setHours(0, 0, 0, 0)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return Math.round((due.getTime() - today.getTime()) / 86_400_000)
+}
+
+/**
+ * Rótulo PT-BR de contagem regressiva de um prazo
+ * (ex.: "Faltam 3 dias", "Vence hoje", "Atrasado há 2 dias"). null sem data.
+ */
+export function deliveryCountdown(date: string | Date | null | undefined): string | null {
+  const d = daysUntil(date)
+  if (d == null) return null
+  if (d === 0) return 'Vence hoje'
+  if (d === 1) return 'Falta 1 dia'
+  if (d > 1) return `Faltam ${d} dias`
+  const past = Math.abs(d)
+  return past === 1 ? 'Atrasado há 1 dia' : `Atrasado há ${past} dias`
 }

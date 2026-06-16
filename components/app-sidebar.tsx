@@ -15,6 +15,7 @@ import {
   DollarSign,
   Receipt,
   Settings,
+  Hexagon,
 } from 'lucide-react'
 import {
   Sidebar,
@@ -50,7 +51,7 @@ const NAV_GROUPS = [
     label: 'Comercial',
     items: [
       { title: 'Contatos', href: '/contatos', icon: Users },
-      { title: 'Oportunidades', href: '/oportunidades', icon: Briefcase },
+      { title: 'Projetos', href: '/projetos', icon: Briefcase },
       { title: 'Funil', href: '/funil', icon: BarChart3 },
     ],
   },
@@ -96,10 +97,10 @@ export function AppSidebar() {
     <Sidebar>
       <SidebarHeader className="border-b px-4 py-3">
         <Link href="/" className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-900 text-white text-sm font-bold">
-            IA
+          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
+            <Hexagon className="h-4 w-4" />
           </div>
-          <span className="text-lg font-semibold">CRM Agência</span>
+          <span className="text-base font-semibold tracking-tight">CRM Agência</span>
         </Link>
       </SidebarHeader>
       <SidebarContent>

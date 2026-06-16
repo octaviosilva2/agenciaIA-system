@@ -1,8 +1,13 @@
-export default function ManutencaoPage() {
+import { Suspense } from 'react'
+import { getMaintenanceBoard } from '@/lib/queries/projects-board'
+import { ProjectsView } from '@/components/projects/projects-view'
+
+// Recorte do Operacional: a tela Projetos travada na fase Manutenção.
+export default async function ManutencaoPage() {
+  const maintenance = await getMaintenanceBoard()
   return (
-    <div>
-      <h1 className="text-2xl font-bold mb-4">Manutenção</h1>
-      <p className="text-muted-foreground">Contratos de manutenção — será construído na Fase 3.</p>
-    </div>
+    <Suspense>
+      <ProjectsView phase="manutencao" maintenance={maintenance} />
+    </Suspense>
   )
 }

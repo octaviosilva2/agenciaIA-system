@@ -16,8 +16,8 @@ CRM interno de uma agência de IA com 2 sócios. Gerencia o ciclo completo: estr
 
 | Conceito | O que é |
 |---|---|
-| **Contato** | A pessoa/empresa. Permanente, acumula histórico. Estado é DERIVADO (nunca editado à mão). |
-| **Negócio (deal)** | A oportunidade comercial. Percorre o funil em estágios. Um contato pode ter vários ao longo do tempo. |
+| **Contato** | A pessoa/empresa. Permanente, acumula histórico. Estado é DERIVADO (nunca editado à mão). Ao criar um contato, ele **já entra no funil em Prospect** (cria um negócio) — não existe estado "Contato" solto. |
+| **Negócio (deal)** | A oportunidade comercial. Percorre o funil em estágios. Um contato pode ter vários ao longo do tempo. Na UI, ao virar projeto (Oportunidade), passa a ser tratado como **Projeto**. |
 | **Projeto** | O trabalho em si. Nasce quando o negócio chega em "Oportunidade" (antes do fechamento, para acumular escopo/proposta/negociação). Após fechar, vira Implementação no Operacional. |
 | **Manutenção (contrato)** | Contrato mensal pós-entrega ou suporte avulso. Gera parcelas automáticas no Financeiro. |
 | **NCT** | Narrativa → Compromisso → Tarefa. Camada de gestão estratégica (estilo G4). Compromissos têm tipo, progresso, confiança e check-ins. |
@@ -48,7 +48,7 @@ GESTÃO
 
 COMERCIAL
   Contatos
-  Oportunidades
+  Projetos        (antiga "Oportunidades" — todos os projetos por estágio)
   Funil
 
 OPERACIONAL

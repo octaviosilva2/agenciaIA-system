@@ -4,6 +4,7 @@ import { Separator } from '@/components/ui/separator'
 import { createClient } from '@/lib/supabase/server'
 import { logout } from '@/app/login/actions'
 import { Button } from '@/components/ui/button'
+import { ThemeToggle } from '@/components/theme-toggle'
 import { LogOut } from 'lucide-react'
 
 export default async function DashboardLayout({
@@ -17,7 +18,7 @@ export default async function DashboardLayout({
   return (
     <SidebarProvider>
       <AppSidebar />
-      <SidebarInset>
+      <SidebarInset className="min-w-0">
         <header className="flex h-12 items-center gap-2 border-b px-4">
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="h-4" />
@@ -25,13 +26,14 @@ export default async function DashboardLayout({
           <span className="text-sm text-muted-foreground">
             {user?.email}
           </span>
+          <ThemeToggle />
           <form action={logout}>
             <Button variant="ghost" size="icon" type="submit" className="h-8 w-8">
               <LogOut className="h-4 w-4" />
             </Button>
           </form>
         </header>
-        <main className="flex-1 p-4 md:p-6">
+        <main className="min-w-0 flex-1 p-4 md:p-6">
           {children}
         </main>
       </SidebarInset>

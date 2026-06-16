@@ -1,13 +1,19 @@
 'use client'
 
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
-import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Calendar } from '@/components/ui/calendar'
 import { CalendarIcon } from 'lucide-react'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { useState } from 'react'
+import { cn } from '@/lib/utils'
+
+// Item do segmented control (mesmo padrão do toggle Lista/Kanban)
+const ITEM_BASE =
+  'flex h-8 items-center gap-1.5 rounded-[6px] px-2.5 text-xs font-medium transition-colors'
+const ITEM_ACTIVE = 'bg-primary text-primary-foreground'
+const ITEM_IDLE = 'text-muted-foreground hover:bg-accent hover:text-foreground'
 
 /**
  * Filtro temporal reusado em todas as telas com dados temporais.
@@ -61,21 +67,21 @@ export function PeriodFilter() {
   }
 
   return (
-    <div className="flex items-center gap-1">
+    <div className="inline-flex items-center rounded-md border border-border bg-card p-0.5">
       {PERIODS.map((p) => {
         if (p.value === 'personalizado') {
+          const active = currentPeriod === 'personalizado'
           return (
             <Popover key={p.value} open={calendarOpen} onOpenChange={setCalendarOpen}>
               <PopoverTrigger
                 render={
-                  <Button
-                    variant={currentPeriod === 'personalizado' ? 'default' : 'ghost'}
-                    size="sm"
-                    className="text-xs"
+                  <button
+                    type="button"
+                    className={cn(ITEM_BASE, active ? ITEM_ACTIVE : ITEM_IDLE)}
                   />
                 }
               >
-                <CalendarIcon className="h-3 w-3" />
+                <CalendarIcon className="h-3.5 w-3.5" />
                 {de && ate
                   ? `${format(new Date(de), 'dd/MM', { locale: ptBR })} - ${format(new Date(ate), 'dd/MM', { locale: ptBR })}`
                   : 'Personalizado'}
@@ -100,16 +106,16 @@ export function PeriodFilter() {
           )
         }
 
+        const active = currentPeriod === p.value
         return (
-          <Button
+          <button
             key={p.value}
-            variant={currentPeriod === p.value ? 'default' : 'ghost'}
-            size="sm"
+            type="button"
             onClick={() => setPeriod(p.value)}
-            className="text-xs"
+            className={cn(ITEM_BASE, active ? ITEM_ACTIVE : ITEM_IDLE)}
           >
             {p.label}
-          </Button>
+          </button>
         )
       })}
     </div>

@@ -64,24 +64,29 @@ Tela única com toggle **`[≡ Lista] [⬛ Kanban]`** (preferência persiste na 
 
 - Busca por nome/empresa · filtro por estágio do funil · filtro temporal
 - **Lista:** empresa · **estado derivado** (badge) · estágio do deal ativo · projeto ativo · última atividade
-- **Kanban:** colunas = estágios do funil (prospect → negociação); cards dos deals ativos com drag entre estágios (mesmas validações das actions: oportunidade abre modal de projeto, perdido pede motivo, etc.). Terminais (fechado/perdido/reativar/desqualificado) não são colunas — são ações no card/perfil
+- **Kanban (pré-venda):** colunas = **Prospect → Lead → Diagnóstico → Oportunidade** (só esta fatia do funil). Cards dos deals ativos com drag entre estágios. Ao mover para **Oportunidade**, abre o modal que **cria o projeto** (nome + descrição) — sem projeto, a transição não acontece. O avanço a partir de Oportunidade (escopo → proposta → negociação → desfecho) acontece na tela **Oportunidades**, não aqui. Ações do card: **Perdido** (pede motivo) · **Reativar futuramente** · **Desqualificar** (só em Prospect/Lead).
 - "+ Novo contato": form com origem em TEXTO LIVRE
 
 ### `/contatos/[id]` — perfil do contato
-Header: nome · badge do estado derivado · dados de contato · origem · DRI · botão **"+ Novo negócio"** (sempre visível — reativa o ciclo comercial).
+Header enxuto: nome · badge do estado derivado · origem. **Sem** "Novo negócio" aqui (o negócio nasce com o contato em Prospect; novos projetos vêm da tela Projetos).
 
-Seções (abas ou blocos):
-1. **Negócio ativo** — estágio atual com botão avançar (mesmas regras do kanban); se não houver, vazio com CTA
-2. **Projeto vinculado** — link para Oportunidade ou Implementação conforme a fase
-3. **Histórico de negócios** — todos os deals anteriores com desfecho
-4. **Manutenção** — estado atual (com manutenção · sem manutenção · avulso) + link para o contrato
-5. **Diagnóstico** — diagnósticos do contato (criar/editar aqui; não existe mais na sidebar)
-6. **Interações** — timeline de `activities` + form rápido de nota
+Seções (blocos, layout organizado — evitar "monte de modal"):
+1. **Dados do contato** — segmento/cidade, contato, telefone, e-mail, DRI, notas
+2. **Projetos** — lista dos projetos do contato (cada um com estágio + valor + link para a tela do projeto). Manutenção, escopo, preço etc. ficam **dentro do projeto**, não aqui.
+3. **Diagnósticos** — diagnósticos do contato (criar aqui)
+4. **Interações** — timeline de `activities` + form rápido de nota
 
-### `/oportunidades`
-Projetos cujo deal está em {oportunidade, escopo, proposta, negociacao}. Tabela: projeto · cliente (link p/ contato) · estágio comercial (badge) · valor · DRI.
+> Removido do perfil: "Negócio ativo", "Projeto vinculado", "Histórico de negócios" e "Manutenção" — tudo isso é responsabilidade da **tela do projeto**.
 
-Botão **"+ Nova oportunidade"**: seleciona contato existente + nome do projeto → cria deal já em `oportunidade` + projeto, de uma vez.
+### `/oportunidades` → **Projetos** (rota mantida `/oportunidades` por ora; renomear para `/projetos` é tarefa do handoff)
+Tela única **Projetos** do Comercial: todos os projetos por estágio. **Toggle `[≡ Lista] [⬛ Kanban]`** + filtros (busca, estágio, temporal).
+
+- **Lista:** projeto · cliente (link p/ contato) · estágio comercial (badge) · valor · DRI.
+- **Kanban (venda):** colunas ativas = **Oportunidade → Escopo → Proposta → Negociação** + colunas terminais **Fechado · Perdido · Reativar**. Card = **projeto** (nome do projeto + nome do contato) · valor · DRI. Drag avança o estágio. **Aqui o desfecho é permitido**: arrastar para uma terminal (ou usar o menu) → **Fechado** abre dialog **com/sem manutenção** (cria charge setup; projeto migra para Implementação) · **Perdido** (pede motivo) · **Reativar**. (Em Contatos as terminais são read-only; aqui não.)
+
+Botão **"+ Novo projeto"**: seleciona contato existente + nome do projeto (+ valor + descrição) → cria deal já em `oportunidade` + projeto, de uma vez.
+
+> **Visão futura (handoff):** "Projetos" deve ser a aba única que reúne projetos comerciais E de implementação; a **tela do projeto `/oportunidades/[id]`** é o detalhe canônico (preço, escopo, manutenção, implementação, prazos), compartilhado com o Operacional.
 
 ### `/oportunidades/[id]` — tela do projeto (foco comercial)
 - Header: nome do projeto · contato (link) · estágio badge · valor · DRI · botão avançar estágio (escopo → proposta → negociação)

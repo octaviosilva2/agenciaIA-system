@@ -5,17 +5,32 @@
 
 ## Visão geral
 
-| Fase | Entrega | Gate |
-|---|---|---|
-| 0 | Fundação: app, auth, layout, sidebar | — |
-| 1 | Banco completo: migrations + types + rules puras testadas | **GATE** |
-| 2 | Comercial: contatos, perfil, funil de deals, oportunidades | **GATE** |
-| 3 | Operacional: implementação + manutenção | — |
-| 4 | Financeiro: contas unificada + visão geral + sincronizações | **GATE** |
-| 5 | Gestão: estratégia + NCT + tarefas | — |
-| 6 | Dashboard + página Funil + polimento | **GATE final** |
+| Fase | Entrega | Gate | Status |
+|---|---|---|---|
+| 0 | Fundação: app, auth, layout, sidebar | — | ✅ Concluída |
+| 1 | Banco completo: migrations + types + rules puras testadas | **GATE** | ✅ Concluída e aprovada |
+| 2 | Comercial: contatos, perfil, funil de deals, oportunidades | **GATE** | ⬜ Próxima (começa na etapa 2.0) |
+| 3 | Operacional: implementação + manutenção | — | ⬜ |
+| 4 | Financeiro: contas unificada + visão geral + sincronizações | **GATE** | ⬜ |
+| 5 | Gestão: estratégia + NCT + tarefas | — | ⬜ |
+| 6 | Dashboard + página Funil + polimento | **GATE final** | ⬜ |
 
 A ordem é deliberada: o Comercial é o coração e destrava Operacional; Financeiro depende dos dois; NCT/Tarefas é independente; Dashboard e Funil são agregadores e vêm por último, quando todos os dados existem.
+
+O estado detalhado do que já foi entregue nas Fases 0 e 1 (e o que NÃO deve ser refeito) está em [`07-handover.md`](07-handover.md).
+
+---
+
+## Fluxo UI-first (obrigatório da Fase 2 em diante)
+
+O estilo visual aprovado do sistema está em [`06-design-system.md`](06-design-system.md), com a referência viva em `frontend-teste/style-guide.html`. A partir da Fase 2, **cada área/tela nova segue este ciclo, nesta ordem**:
+
+1. **UI primeiro** — montar a(s) tela(s) completas com dados mock/estáticos, seguindo os tokens, receitas e badges do design system. Cor, medida, tipografia e label **não se inventam**; labels e cores de status saem de `lib/format.ts`.
+2. **Validação visual (mini-gate)** — mostrar a tela ao humano e esperar aprovação do visual/UX **antes** de qualquer persistência.
+3. **Backend depois** — queries (`lib/queries/`), server actions, integração Supabase e uso das regras (`lib/rules/`) só entram após o visual aprovado. Substituir o mock pelos dados reais **sem alterar o layout aprovado**.
+4. **Testes e aceite** — testes das regras/validações novas + build limpo fecham a área.
+
+Os GATEs de fase do roteiro continuam valendo por cima desses mini-gates visuais.
 
 ---
 
@@ -40,6 +55,15 @@ A ordem é deliberada: o Comercial é o coração e destrava Operacional; Financ
 **GATE:** humano revisa schema aplicado + resultados dos testes.
 
 ## Fase 2 — Comercial
+
+> Cada item de tela abaixo segue o **fluxo UI-first** (UI mock → validação visual → backend → testes).
+
+0. **Etapa 2.0 — Alinhamento visual da fundação** (uma vez, antes de qualquer tela nova):
+   - Aplicar em `app/globals.css` os tokens HSL do design system (§3 de `06-design-system.md`) — hoje estão os defaults do shadcn (oklch, fundo branco)
+   - Trocar fontes para **Inter** (texto) + **JetBrains Mono** (números/código) em `app/layout.tsx` — hoje são Geist/Geist Mono
+   - Refatorar `lib/format.ts` para o formato `{ label, className }` por enum, com os tons claro+escuro do §6.2 (funil em escala slate; "Done" → "Concluída"; "Reativar Futuramente" → "Reativar") — **sem tocar nas regras de `lib/rules/` nem nos zod schemas**
+   - Criar o componente `EntityBadge` (§7) e alinhar sidebar/header/login ao `style-guide.html`
+   - Aceite: app existente renderiza idêntico ao style guide (tema claro); build e testes verdes
 1. `/contatos` lista + filtros + "+ Novo contato" (origem texto livre)
 2. Estado derivado integrado na lista (badge)
 3. `/contatos` kanban (dnd-kit) com transições validadas: modal de projeto ao mover p/ oportunidade, motivo ao perder, dialog manutenção ao fechar, eventos de estágio gravados
@@ -87,6 +111,8 @@ A ordem é deliberada: o Comercial é o coração e destrava Operacional; Financ
 
 ## Regras permanentes do executor
 
+- Toda UI nasce de `docs/06-design-system.md` + `frontend-teste/style-guide.html`, seguindo o fluxo UI-first (UI mock → validação visual → backend). Nunca inventar cor, medida ou label.
+- Nunca refazer o que as Fases 0–1 já entregaram (ver `07-handover.md`) — banco, rules, validations e auth estão prontos e testados.
 - Nunca avançar de fase com build/teste quebrado ou gate pendente.
 - Nunca mudar schema fora de migration versionada.
 - Escopo é o dos documentos `01–04`. Ideia nova → anotar em `.work/STATUS.md` seção "Backlog", não implementar.

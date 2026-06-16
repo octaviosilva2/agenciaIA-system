@@ -1,8 +1,13 @@
-export default function ImplementacaoPage() {
+import { Suspense } from 'react'
+import { getImplementationBoard } from '@/lib/queries/projects-board'
+import { ProjectsView } from '@/components/projects/projects-view'
+
+// Recorte do Operacional: a tela Projetos travada na fase Implementação.
+export default async function ImplementacaoPage() {
+  const implementation = await getImplementationBoard()
   return (
-    <div>
-      <h1 className="text-2xl font-bold mb-4">Implementação</h1>
-      <p className="text-muted-foreground">Kanban de projetos em execução — será construído na Fase 3.</p>
-    </div>
+    <Suspense>
+      <ProjectsView phase="implementacao" implementation={implementation} />
+    </Suspense>
   )
 }
