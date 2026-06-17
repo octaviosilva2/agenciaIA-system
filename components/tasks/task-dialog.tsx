@@ -17,6 +17,9 @@ import type { Database } from '@/lib/supabase/types'
 type TaskStatus = Database['public']['Enums']['task_status']
 type TaskPriority = Database['public']['Enums']['task_priority']
 
+/** Recorrência da tarefa (mock front): avulsa ou repetição mensal num dia do mês. */
+export type TaskRecurrence = 'none' | 'monthly'
+
 /** Dados editáveis de uma tarefa (sem id — usado em criar e editar). */
 export type TaskDraft = {
   title: string
@@ -24,6 +27,8 @@ export type TaskDraft = {
   status: TaskStatus
   priority: TaskPriority
   dueDate: string | null
+  recurrence: TaskRecurrence
+  recurrenceDay: number | null // dia do mês (1–28) quando recurrence='monthly'
 }
 
 const labelCls = 'mb-1 block text-xs font-medium'
@@ -34,22 +39,35 @@ const selectCls =
 const textareaCls =
   'w-full rounded-md border border-border bg-card px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring'
 
+type TaskFields = {
+  title: string
+  description: string | null
+  status: TaskStatus
+  priority: TaskPriority
+  dueDate: string | null
+  recurrence?: TaskRecurrence
+  recurrenceDay?: number | null
+}
+
 /**
  * Dialog de criar/editar tarefa. Quando `task` é null cria (no `defaultStatus`);
  * quando presente edita e mostra o botão Excluir.
+ * `allowRecurrence` habilita a opção de recorrência mensal (usado na Manutenção).
  */
 export function TaskDialog({
   open,
   onOpenChange,
   task,
   defaultStatus,
+  allowRecurrence = false,
   onSubmit,
   onDelete,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
-  task: { title: string; description: string | null; status: TaskStatus; priority: TaskPriority; dueDate: string | null } | null
+  task: TaskFields | null
   defaultStatus: TaskStatus
+  allowRecurrence?: boolean
   onSubmit: (draft: TaskDraft) => void
   onDelete?: () => void
 }) {
@@ -58,6 +76,8 @@ export function TaskDialog({
   const [status, setStatus] = useState<TaskStatus>(defaultStatus)
   const [priority, setPriority] = useState<TaskPriority>('proximo')
   const [dueDate, setDueDate] = useState('')
+  const [recurring, setRecurring] = useState(false)
+  const [recurrenceDay, setRecurrenceDay] = useState(10)
   const [error, setError] = useState('')
 
   // Repreenche os campos sempre que o dialog abre.
@@ -68,6 +88,8 @@ export function TaskDialog({
     setStatus(task?.status ?? defaultStatus)
     setPriority(task?.priority ?? 'proximo')
     setDueDate(task?.dueDate ?? '')
+    setRecurring(task?.recurrence === 'monthly')
+    setRecurrenceDay(task?.recurrenceDay ?? 10)
     setError('')
   }, [open, task, defaultStatus])
 
@@ -77,12 +99,15 @@ export function TaskDialog({
       setError('Informe um título.')
       return
     }
+    const monthly = allowRecurrence && recurring
     onSubmit({
       title: t,
       description: description.trim() || null,
       status,
       priority,
       dueDate: dueDate || null,
+      recurrence: monthly ? 'monthly' : 'none',
+      recurrenceDay: monthly ? recurrenceDay : null,
     })
   }
 
@@ -149,7 +174,9 @@ export function TaskDialog({
           </div>
 
           <div>
-            <label className={labelCls} htmlFor="task_due">Prazo</label>
+            <label className={labelCls} htmlFor="task_due">
+              {recurring ? 'Primeiro vencimento' : 'Prazo'}
+            </label>
             <input
               id="task_due"
               type="date"
@@ -158,6 +185,41 @@ export function TaskDialog({
               className={`${inputCls} w-44`}
             />
           </div>
+
+          {allowRecurrence && (
+            <div className="rounded-md border border-border bg-muted/30 p-3">
+              <label className="flex cursor-pointer items-center gap-2 text-sm font-medium">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 cursor-pointer rounded border-border"
+                  checked={recurring}
+                  onChange={(e) => setRecurring(e.target.checked)}
+                />
+                Repetir todo mês
+              </label>
+              {recurring && (
+                <div className="mt-2 flex items-end gap-2">
+                  <div>
+                    <label className={labelCls} htmlFor="task_recur_day">Dia do mês</label>
+                    <input
+                      id="task_recur_day"
+                      type="number"
+                      min={1}
+                      max={28}
+                      value={recurrenceDay}
+                      onChange={(e) =>
+                        setRecurrenceDay(Math.max(1, Math.min(28, Number(e.target.value) || 1)))
+                      }
+                      className={`${inputCls} w-24`}
+                    />
+                  </div>
+                  <p className="pb-2 text-xs text-muted-foreground">
+                    Gera uma tarefa todo mês neste dia.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <DialogFooter className="sm:justify-between">

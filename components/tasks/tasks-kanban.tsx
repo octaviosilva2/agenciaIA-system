@@ -13,10 +13,10 @@ import {
   type DragEndEvent,
 } from '@dnd-kit/core'
 import { toast } from 'sonner'
-import { Plus } from 'lucide-react'
+import { Plus, Repeat } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { EntityBadge } from '@/components/ui/entity-badge'
-import { TaskDialog, type TaskDraft } from '@/components/tasks/task-dialog'
+import { TaskDialog, type TaskDraft, type TaskRecurrence } from '@/components/tasks/task-dialog'
 import {
   TASK_STATUS,
   TASK_PRIORITY,
@@ -35,6 +35,9 @@ export type TaskItem = {
   status: TaskStatus
   priority: Database['public']['Enums']['task_priority']
   dueDate: string | null
+  // Recorrência (usada na Manutenção): undefined/'none' = tarefa avulsa.
+  recurrence?: TaskRecurrence
+  recurrenceDay?: number | null
 }
 
 /**
@@ -60,6 +63,12 @@ function TaskCardContent({ task }: { task: TaskItem }) {
       <p className="text-sm font-medium leading-snug">{task.title}</p>
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
         <EntityBadge meta={TASK_PRIORITY[task.priority]} />
+        {task.recurrence === 'monthly' && (
+          <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700 dark:bg-slate-500/15 dark:text-slate-300">
+            <Repeat className="h-3 w-3" />
+            Mensal{task.recurrenceDay ? ` · dia ${task.recurrenceDay}` : ''}
+          </span>
+        )}
         {task.dueDate && (
           <span
             className={cn(
@@ -152,9 +161,11 @@ function Column({
 export function TasksKanban({
   tasks,
   handlers = {},
+  allowRecurrence = false,
 }: {
   tasks: TaskItem[]
   handlers?: TaskHandlers
+  allowRecurrence?: boolean
 }) {
   const [items, setItems] = useState<TaskItem[]>(tasks)
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -278,6 +289,7 @@ export function TasksKanban({
         onOpenChange={setDialogOpen}
         task={editing}
         defaultStatus={creatingStatus ?? 'todo'}
+        allowRecurrence={allowRecurrence}
         onSubmit={handleSubmit}
         onDelete={editing ? handleDelete : undefined}
       />

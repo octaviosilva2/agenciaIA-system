@@ -1,9 +1,10 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { format, parseISO } from 'date-fns'
 import { toast } from 'sonner'
-import { AlertCircle, ChevronRight } from 'lucide-react'
+import { AlertCircle, ChevronRight, ListChecks } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { EntityBadge } from '@/components/ui/entity-badge'
 import {
@@ -307,9 +308,15 @@ export function MaintenanceEditor({
         </dl>
       )}
 
-      <Button type="button" variant="outline" size="sm" onClick={startEditing}>
-        Reconfigurar
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        <Button variant="outline" size="sm" render={<Link href={`/manutencao/${contract.id}`} />}>
+          <ListChecks className="h-4 w-4" />
+          Tarefas de manutenção
+        </Button>
+        <Button type="button" variant="outline" size="sm" onClick={startEditing}>
+          Reconfigurar
+        </Button>
+      </div>
     </div>
   )
 }

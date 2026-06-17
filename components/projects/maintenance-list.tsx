@@ -45,14 +45,11 @@ export function MaintenanceList({ items }: { items: MaintenanceItem[] }) {
         <tbody>
           {items.map((c) => {
             const overdue = isOverdue(c.nextContactDate)
-            const clickable = !!c.dealId
             return (
               <tr
                 key={c.id}
-                onClick={() => c.dealId && router.push(`/projetos/${c.dealId}`)}
-                className={`border-b border-border last:border-0 ${
-                  clickable ? 'cursor-pointer hover:bg-accent' : ''
-                }`}
+                onClick={() => router.push(`/manutencao/${c.id}`)}
+                className="cursor-pointer border-b border-border last:border-0 hover:bg-accent"
               >
                 <td className="px-3 py-2 font-medium">{c.company}</td>
                 <td className="px-3 py-2 text-muted-foreground">{c.projectName ?? '—'}</td>
