@@ -50,6 +50,7 @@ export type ContactProfile = {
   contactEmail: string | null
   origin: string | null
   notes: string | null
+  archived: boolean
   status: ContactStatus
   deals: ProfileDeal[]
   activities: ProfileActivity[]
@@ -71,6 +72,7 @@ type Raw = {
   contact_email: string | null
   origin: string | null
   notes: string | null
+  archived_at: string | null
   deals: {
     id: string
     title: string
@@ -102,7 +104,7 @@ export async function getContactProfile(id: string): Promise<ContactProfile | nu
     .from('companies')
     .select(
       `
-      id, name, segment, city, contact_name, contact_phone, contact_email, origin, notes,
+      id, name, segment, city, contact_name, contact_phone, contact_email, origin, notes, archived_at,
       deals ( id, title, stage, estimated_value, next_action, lost_reason, closed_at, created_at,
                projects ( id, name, status ) ),
       activities ( id, type, content, occurred_at ),
@@ -135,6 +137,7 @@ export async function getContactProfile(id: string): Promise<ContactProfile | nu
     contactEmail: c.contact_email,
     origin: c.origin,
     notes: c.notes,
+    archived: c.archived_at != null,
     status,
     deals: deals.map((d) => {
       const p = d.projects[0] ?? null

@@ -25,6 +25,12 @@ export type ContactRow = {
   currentStage: DealStage | null // estágio do deal mais recente (ativo OU terminal)
   activeProject: string | null
   lastActivityAt: string | null
+  // Campos completos para o dialog de edição (kebab).
+  contactName: string | null
+  contactPhone: string | null
+  contactEmail: string | null
+  origin: string | null
+  notes: string | null
 }
 
 // Forma do retorno bruto do Supabase (client não tipado → cast local, sem `any`).
@@ -37,6 +43,11 @@ type RawCompany = {
   name: string
   segment: string | null
   city: string | null
+  contact_name: string | null
+  contact_phone: string | null
+  contact_email: string | null
+  origin: string | null
+  notes: string | null
   deals: RawDeal[]
   projects: RawProject[]
   contracts: RawContract[]
@@ -47,20 +58,24 @@ type RawCompany = {
  * Carrega os contatos com o estado derivado calculado por contato.
  * O estado é puro (lib/rules) — aqui só montamos os inputs a partir do banco.
  */
-export async function getContacts(): Promise<ContactRow[]> {
+export async function getContacts(archived = false): Promise<ContactRow[]> {
   const supabase = await createClient()
-  const { data, error } = await supabase
+  let query = supabase
     .from('companies')
     .select(
       `
-      id, name, segment, city,
+      id, name, segment, city, contact_name, contact_phone, contact_email, origin, notes,
       deals ( id, stage, created_at ),
       projects ( id, name, status, deal_id ),
       contracts ( status ),
       activities ( occurred_at )
     `,
     )
-    .order('name', { ascending: true })
+
+  // Visão ativa (archived_at IS NULL) vs. aba Arquivados (archived_at IS NOT NULL).
+  query = archived ? query.not('archived_at', 'is', null) : query.is('archived_at', null)
+
+  const { data, error } = await query.order('name', { ascending: true })
 
   if (error) {
     throw new Error(`Falha ao carregar contatos: ${error.message}`)
@@ -107,6 +122,11 @@ export async function getContacts(): Promise<ContactRow[]> {
       currentStage,
       activeProject,
       lastActivityAt,
+      contactName: c.contact_name,
+      contactPhone: c.contact_phone,
+      contactEmail: c.contact_email,
+      origin: c.origin,
+      notes: c.notes,
     }
   })
 }

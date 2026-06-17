@@ -5,23 +5,33 @@ import { ContactsView } from '@/components/contacts/contacts-view'
 import type { KanbanDeal } from '@/components/contacts/deal-card'
 
 // Server Component → queries → componente client (padrão 04-arquitetura).
-export default async function ContatosPage() {
-  const [contacts, allDeals] = await Promise.all([getContacts(), getDealsBoard()])
+export default async function ContatosPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ arquivados?: string }>
+}) {
+  const sp = await searchParams
+  const archived = sp.arquivados === '1'
 
-  const deals: KanbanDeal[] = contactsBoardDeals(allDeals).map((d) => ({
-    id: d.id,
-    company: d.company,
-    title: d.title,
-    stage: d.stage,
-    estimatedValue: d.estimatedValue,
-    nextAction: d.nextAction,
-    hasProject: d.hasProject,
-    maintenance: d.maintenance,
-  }))
+  const contacts = await getContacts(archived)
+
+  // O kanban (negócios ativos) só aparece na visão ativa.
+  const deals: KanbanDeal[] = archived
+    ? []
+    : contactsBoardDeals(await getDealsBoard()).map((d) => ({
+        id: d.id,
+        company: d.company,
+        title: d.title,
+        stage: d.stage,
+        estimatedValue: d.estimatedValue,
+        nextAction: d.nextAction,
+        hasProject: d.hasProject,
+        maintenance: d.maintenance,
+      }))
 
   return (
     <Suspense>
-      <ContactsView contacts={contacts} deals={deals} />
+      <ContactsView contacts={contacts} deals={deals} archived={archived} />
     </Suspense>
   )
 }

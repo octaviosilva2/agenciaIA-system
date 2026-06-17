@@ -46,6 +46,11 @@ Stack: Next.js 16 (App Router, Turbopack) + Tailwind v4 + shadcn/base-ui + Supab
   - **Backend:** query `lib/queries/maintenance-detail.ts` (`getMaintenanceDetail`); actions `lib/actions/tasks.ts` (CRUD de tarefas de manutenção, `area='operacional'`+`contract_id`); cobrança em `lib/actions/project.ts` (`updateMaintenanceContract`, atualiza todos os campos + regenera recorrências pendentes em `charges`). Regra pura `lib/rules/task-recurrence.ts` (`nextMonthlyDueDate`, testada).
   - **Recorrência:** ao concluir (status→`done`) uma tarefa mensal, a action gera automaticamente a próxima ocorrência (status `todo`, vencimento no próximo dia configurado). A concluída fica no histórico. Idempotência simples: gera só na transição p/ `done`.
   - **NÃO mexe na tela de Implementação** (congelada): as actions de tarefas são escopadas à manutenção (`*MaintenanceTask`); o `TasksKanban` segue compartilhado (handlers opcionais). `contracts` não tem método de pagamento padrão (método é por `charges.method`) — se quiser, é coluna nova.
+- **Arquivar / Excluir (menu ⋯) — EM ANDAMENTO (fatia 1 de 4):**
+  - **Migration `0009`** aplicada: `archived_at timestamptz` em `companies`, `deals`, `contracts`, `tasks` (+ índices). Soft delete reversível (arquivar/reativar) + exclusão permanente (DELETE em cascata pelas FKs). Types regenerados.
+  - **Base reutilizável:** `components/entity-actions-menu.tsx` — `EntityActionsMenu` (kebab: Ativo = Editar/Arquivar/Excluir; Arquivado = Reativar/Excluir permanente) + `ConfirmDeleteDialog` (exige digitar o nome para confirmar).
+  - **Contatos ✅ (front+back):** coluna de ações na lista; toggle **Ativos | Arquivados** (`?arquivados=1`, server `getContacts(archived)`); kebab no header de `/contatos/[id]` (com selo "Arquivado"); dialog de edição (`EditContactDialog` + action `updateContact`). Actions em `lib/actions/contacts.ts`.
+  - **Falta:** mesmo padrão em **Projetos**, **Manutenção**, **Tarefas**; e o kebab no **kanban de Contatos** (cards são deals — a cascata de esconder deals de contato arquivado entra junto com Projetos, que já mexe em `getDealsBoard`).
 - `closeDeal` cria 1 cobrança `setup` automática ao fechar; o `PaymentEditor` reconfigura (apaga pendentes e recria).
 - Aviso de build `middleware`→`proxy` (deprecação Next 16) — fora de escopo.
 

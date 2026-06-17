@@ -5,6 +5,8 @@ import { getContactProfile } from '@/lib/queries/contact-profile'
 import { EntityBadge } from '@/components/ui/entity-badge'
 import { ActivityForm } from '@/components/contacts/activity-form'
 import { DiagnosticForm } from '@/components/contacts/diagnostic-form'
+import { ContactHeaderActions } from '@/components/contacts/contact-header-actions'
+import { TONE } from '@/lib/format'
 import {
   DEAL_STAGE,
   ACTIVITY_TYPE_LABELS,
@@ -66,16 +68,37 @@ export default async function ContatoProfilePage({
 
       {/* Header */}
       <header className="rounded-lg border border-border bg-card p-4">
-        <div className="flex items-center gap-2">
-          <h2 className="text-lg font-semibold tracking-tight">{profile.name}</h2>
-          {/* Estágio do deal mais recente (deals já vêm ordenados desc). */}
-          {profile.deals[0] && <EntityBadge meta={DEAL_STAGE[profile.deals[0].stage]} />}
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-semibold tracking-tight">{profile.name}</h2>
+              {/* Estágio do deal mais recente (deals já vêm ordenados desc). */}
+              {profile.deals[0] && <EntityBadge meta={DEAL_STAGE[profile.deals[0].stage]} />}
+              {profile.archived && (
+                <EntityBadge meta={{ label: 'Arquivado', className: TONE['zinc-faint'] }} />
+              )}
+            </div>
+            {profile.origin && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                <span className="font-medium">Origem:</span> {profile.origin}
+              </p>
+            )}
+          </div>
+          <ContactHeaderActions
+            contact={{
+              id: profile.id,
+              name: profile.name,
+              segment: profile.segment,
+              city: profile.city,
+              contactName: profile.contactName,
+              contactPhone: profile.contactPhone,
+              contactEmail: profile.contactEmail,
+              origin: profile.origin,
+              notes: profile.notes,
+              archived: profile.archived,
+            }}
+          />
         </div>
-        {profile.origin && (
-          <p className="mt-1 text-xs text-muted-foreground">
-            <span className="font-medium">Origem:</span> {profile.origin}
-          </p>
-        )}
       </header>
 
       <div className="grid items-start gap-4 lg:grid-cols-3">

@@ -305,6 +305,7 @@ export type Database = {
       }
       companies: {
         Row: {
+          archived_at: string | null
           city: string | null
           contact_email: string | null
           contact_name: string | null
@@ -319,6 +320,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          archived_at?: string | null
           city?: string | null
           contact_email?: string | null
           contact_name?: string | null
@@ -333,6 +335,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          archived_at?: string | null
           city?: string | null
           contact_email?: string | null
           contact_name?: string | null
@@ -358,6 +361,7 @@ export type Database = {
       }
       contracts: {
         Row: {
+          archived_at: string | null
           billing_day: number | null
           company_id: string
           contact_frequency_days: number | null
@@ -376,6 +380,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          archived_at?: string | null
           billing_day?: number | null
           company_id: string
           contact_frequency_days?: number | null
@@ -394,6 +399,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          archived_at?: string | null
           billing_day?: number | null
           company_id?: string
           contact_frequency_days?: number | null
@@ -475,6 +481,7 @@ export type Database = {
       }
       deals: {
         Row: {
+          archived_at: string | null
           budget: string | null
           closed_at: string | null
           company_id: string
@@ -493,6 +500,7 @@ export type Database = {
           urgency: Database["public"]["Enums"]["deal_urgency"] | null
         }
         Insert: {
+          archived_at?: string | null
           budget?: string | null
           closed_at?: string | null
           company_id: string
@@ -511,6 +519,7 @@ export type Database = {
           urgency?: Database["public"]["Enums"]["deal_urgency"] | null
         }
         Update: {
+          archived_at?: string | null
           budget?: string | null
           closed_at?: string | null
           company_id?: string
@@ -836,6 +845,7 @@ export type Database = {
       }
       tasks: {
         Row: {
+          archived_at: string | null
           area: Database["public"]["Enums"]["task_area"]
           assignee_id: string | null
           commitment_id: string | null
@@ -857,6 +867,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          archived_at?: string | null
           area: Database["public"]["Enums"]["task_area"]
           assignee_id?: string | null
           commitment_id?: string | null
@@ -878,6 +889,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          archived_at?: string | null
           area?: Database["public"]["Enums"]["task_area"]
           assignee_id?: string | null
           commitment_id?: string | null
