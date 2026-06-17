@@ -257,3 +257,111 @@ export async function updateProjectStatus(
     message: status === 'entregue' ? 'Projeto marcado como entregue.' : 'Status atualizado.',
   }
 }
+
+/** Edição de preço/cobrança do contrato a partir da tela de Manutenção. */
+export type MaintenanceContractFullInput = {
+  monthlyValue: number
+  minMonths: number
+  billingDay: number // 1..28
+  startDate: string // 'yyyy-MM-dd'
+  nextContactDate: string | null
+  contactFrequencyDays: number | null
+  sla: string | null
+  notes: string | null
+}
+
+/**
+ * Atualiza todos os campos do contrato de manutenção (preço e detalhes de cobrança)
+ * a partir da tela de Manutenção. Para contratos mensais, regenera as recorrências
+ * PENDENTES (substitui pendentes, preserva pagas via idempotência contract_id+due_date),
+ * mantendo o Financeiro consistente com o novo valor mensal.
+ */
+export async function updateMaintenanceContract(
+  contractId: string,
+  data: MaintenanceContractFullInput,
+): Promise<ActionState> {
+  if (!Number.isInteger(data.minMonths) || data.minMonths < 1) {
+    return { success: false, message: 'A duração mínima deve ser de ao menos 1 mês.' }
+  }
+  if (!Number.isInteger(data.billingDay) || data.billingDay < 1 || data.billingDay > 28) {
+    return { success: false, message: 'O dia de cobrança deve estar entre 1 e 28.' }
+  }
+  if (!data.startDate) return { success: false, message: 'Informe a data de início.' }
+
+  const supabase = await createClient()
+
+  // Contexto do contrato (para gerar charges e revalidar a tela do projeto).
+  const { data: ctr, error: cErr } = await supabase
+    .from('contracts')
+    .select('company_id, project_id, kind, project:projects ( deal_id )')
+    .eq('id', contractId)
+    .single()
+  if (cErr || !ctr) return { success: false, message: `Contrato não encontrado: ${cErr?.message ?? ''}` }
+
+  const ctx = ctr as unknown as {
+    company_id: string
+    project_id: string | null
+    kind: 'mensal' | 'avulso'
+    project: { deal_id: string | null } | { deal_id: string | null }[] | null
+  }
+
+  // Valor mensal só é obrigatório para contrato mensal (avulso pode não ter).
+  if (ctx.kind === 'mensal' && !(data.monthlyValue > 0)) {
+    return { success: false, message: 'Informe o valor mensal.' }
+  }
+
+  const { error: uErr } = await supabase
+    .from('contracts')
+    .update({
+      monthly_value: data.monthlyValue,
+      min_months: data.minMonths,
+      billing_day: data.billingDay,
+      start_date: data.startDate,
+      next_contact_date: data.nextContactDate,
+      contact_frequency_days: data.contactFrequencyDays,
+      sla: data.sla,
+      notes: data.notes,
+    })
+    .eq('id', contractId)
+  if (uErr) return { success: false, message: `Erro ao salvar contrato: ${uErr.message}` }
+
+  // Regenera as recorrências pendentes do contrato mensal (preserva pagas).
+  if (ctx.kind === 'mensal') {
+    const { error: delErr } = await supabase
+      .from('charges')
+      .delete()
+      .eq('contract_id', contractId)
+      .eq('kind', 'recorrencia')
+      .eq('status', 'pendente')
+    if (delErr) return { success: false, message: `Erro ao atualizar parcelas: ${delErr.message}` }
+
+    const generated = generateRecurrences({
+      contractId,
+      startDate: parseISO(data.startDate),
+      minMonths: data.minMonths,
+      billingDay: data.billingDay,
+      monthlyValue: data.monthlyValue,
+    })
+    const rows = generated.map((g) => ({
+      company_id: ctx.company_id,
+      project_id: ctx.project_id,
+      contract_id: g.contract_id,
+      description: g.description,
+      kind: g.kind,
+      amount: g.amount,
+      due_date: g.due_date,
+      status: 'pendente' as const,
+    }))
+    const { error: insErr } = await supabase
+      .from('charges')
+      .upsert(rows, { onConflict: 'contract_id,due_date', ignoreDuplicates: true })
+    if (insErr) return { success: false, message: `Erro ao gerar parcelas: ${insErr.message}` }
+  }
+
+  revalidatePath(`/manutencao/${contractId}`)
+  revalidatePath('/manutencao')
+  const proj = ctx.project
+  const dealId = Array.isArray(proj) ? proj[0]?.deal_id : proj?.deal_id
+  if (dealId) revalidatePath(`/projetos/${dealId}`)
+  return { success: true, message: 'Cobrança atualizada.' }
+}

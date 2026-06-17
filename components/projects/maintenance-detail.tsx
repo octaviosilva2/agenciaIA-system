@@ -2,11 +2,19 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { ArrowLeft, Pencil } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { EntityBadge } from '@/components/ui/entity-badge'
 import { TasksKanban, type TaskItem } from '@/components/tasks/tasks-kanban'
+import {
+  createMaintenanceTask,
+  updateMaintenanceTask,
+  moveMaintenanceTask,
+  deleteMaintenanceTask,
+} from '@/lib/actions/tasks'
+import { updateMaintenanceContract } from '@/lib/actions/project'
 import {
   CONTRACT_KIND_LABELS,
   CONTRACT_STATUS_LABELS,
@@ -88,12 +96,31 @@ export function MaintenanceDetail({ data }: { data: MaintenanceDetailData }) {
   const [contactFrequencyDays, setContactFrequencyDays] = useState(data.contactFrequencyDays ?? 30)
   const [sla, setSla] = useState(data.sla ?? '')
   const [notes, setNotes] = useState(data.notes ?? '')
+  const [busy, setBusy] = useState(false)
+  const router = useRouter()
 
   const contactOverdue = isOverdue(nextContactDate)
 
-  function save() {
-    setEditing(false)
-    toast.success('Cobrança atualizada.')
+  async function save() {
+    setBusy(true)
+    const res = await updateMaintenanceContract(data.contractId, {
+      monthlyValue,
+      minMonths,
+      billingDay,
+      startDate,
+      nextContactDate: nextContactDate || null,
+      contactFrequencyDays,
+      sla: sla.trim() || null,
+      notes: notes.trim() || null,
+    })
+    setBusy(false)
+    if (res.success) {
+      toast.success(res.message)
+      setEditing(false)
+      router.refresh()
+    } else {
+      toast.error(res.message)
+    }
   }
 
   return (
@@ -257,11 +284,17 @@ export function MaintenanceDetail({ data }: { data: MaintenanceDetailData }) {
               />
             </div>
             <div className="flex justify-end gap-2 border-t border-border pt-3">
-              <Button type="button" variant="outline" size="sm" onClick={() => setEditing(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={busy}
+                onClick={() => setEditing(false)}
+              >
                 Cancelar
               </Button>
-              <Button type="button" size="sm" onClick={save}>
-                Salvar cobrança
+              <Button type="button" size="sm" disabled={busy} onClick={save}>
+                {busy ? 'Salvando…' : 'Salvar cobrança'}
               </Button>
             </div>
           </div>
@@ -294,7 +327,16 @@ export function MaintenanceDetail({ data }: { data: MaintenanceDetailData }) {
 
       {/* Tarefas da manutenção (mesmo kanban da Implementação, com recorrência mensal) */}
       <SectionCard title="Tarefas de manutenção">
-        <TasksKanban tasks={data.tasks} allowRecurrence />
+        <TasksKanban
+          tasks={data.tasks}
+          allowRecurrence
+          handlers={{
+            onCreate: (draft) => createMaintenanceTask(data.contractId, draft),
+            onUpdate: (id, draft) => updateMaintenanceTask(data.contractId, id, draft),
+            onMove: (id, status) => moveMaintenanceTask(data.contractId, id, status),
+            onDelete: (id) => deleteMaintenanceTask(data.contractId, id),
+          }}
+        />
       </SectionCard>
     </div>
   )

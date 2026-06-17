@@ -840,6 +840,7 @@ export type Database = {
           assignee_id: string | null
           commitment_id: string | null
           company_id: string | null
+          contract_id: string | null
           created_at: string
           deal_id: string | null
           description: string | null
@@ -849,6 +850,8 @@ export type Database = {
           impact: Database["public"]["Enums"]["level_scale"] | null
           priority: Database["public"]["Enums"]["task_priority"]
           project_id: string | null
+          recurrence: Database["public"]["Enums"]["task_recurrence"]
+          recurrence_day: number | null
           status: Database["public"]["Enums"]["task_status"]
           title: string
           updated_at: string
@@ -858,6 +861,7 @@ export type Database = {
           assignee_id?: string | null
           commitment_id?: string | null
           company_id?: string | null
+          contract_id?: string | null
           created_at?: string
           deal_id?: string | null
           description?: string | null
@@ -867,6 +871,8 @@ export type Database = {
           impact?: Database["public"]["Enums"]["level_scale"] | null
           priority?: Database["public"]["Enums"]["task_priority"]
           project_id?: string | null
+          recurrence?: Database["public"]["Enums"]["task_recurrence"]
+          recurrence_day?: number | null
           status?: Database["public"]["Enums"]["task_status"]
           title: string
           updated_at?: string
@@ -876,6 +882,7 @@ export type Database = {
           assignee_id?: string | null
           commitment_id?: string | null
           company_id?: string | null
+          contract_id?: string | null
           created_at?: string
           deal_id?: string | null
           description?: string | null
@@ -885,6 +892,8 @@ export type Database = {
           impact?: Database["public"]["Enums"]["level_scale"] | null
           priority?: Database["public"]["Enums"]["task_priority"]
           project_id?: string | null
+          recurrence?: Database["public"]["Enums"]["task_recurrence"]
+          recurrence_day?: number | null
           status?: Database["public"]["Enums"]["task_status"]
           title?: string
           updated_at?: string
@@ -909,6 +918,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_contract_id_fkey"
+            columns: ["contract_id"]
+            isOneToOne: false
+            referencedRelation: "contracts"
             referencedColumns: ["id"]
           },
           {
@@ -985,6 +1001,7 @@ export type Database = {
         | "financeiro"
         | "sistema"
       task_priority: "urgente" | "proximo" | "futuro"
+      task_recurrence: "none" | "monthly"
       task_status: "analisar" | "todo" | "doing" | "impedimento" | "done"
     }
     CompositeTypes: {
@@ -1168,6 +1185,7 @@ export const Constants = {
         "sistema",
       ],
       task_priority: ["urgente", "proximo", "futuro"],
+      task_recurrence: ["none", "monthly"],
       task_status: ["analisar", "todo", "doing", "impedimento", "done"],
     },
   },
