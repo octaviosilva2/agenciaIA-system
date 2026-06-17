@@ -38,6 +38,8 @@ export type TaskItem = {
   // Recorrência (usada na Manutenção): undefined/'none' = tarefa avulsa.
   recurrence?: TaskRecurrence
   recurrenceDay?: number | null
+  // Arquivamento (soft delete). undefined = ativa.
+  archived?: boolean
 }
 
 /**
@@ -50,10 +52,19 @@ export type TaskHandlers = {
   onUpdate?: (id: string, draft: TaskDraft) => Promise<{ success: boolean; message: string }>
   onMove?: (id: string, status: TaskStatus) => Promise<{ success: boolean; message: string }>
   onDelete?: (id: string) => Promise<{ success: boolean; message: string }>
+  onArchive?: (id: string) => Promise<{ success: boolean; message: string }>
+  onUnarchive?: (id: string) => Promise<{ success: boolean; message: string }>
 }
 
 /** Colunas fixas do kanban de tarefas (task_status). */
 const COLUMNS: TaskStatus[] = ['analisar', 'todo', 'doing', 'impedimento', 'done']
+
+const segCls = (active: boolean) =>
+  `flex h-8 items-center gap-1.5 rounded-[6px] px-2.5 text-sm font-medium transition-colors ${
+    active
+      ? 'bg-primary text-primary-foreground'
+      : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+  }`
 
 /** Card de tarefa — conteúdo visual (sem o wrapper arrastável). */
 function TaskCardContent({ task }: { task: TaskItem }) {
@@ -117,7 +128,7 @@ function Column({
   status: TaskStatus
   tasks: TaskItem[]
   onOpen: (task: TaskItem) => void
-  onAdd: (status: TaskStatus) => void
+  onAdd?: (status: TaskStatus) => void
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status })
   return (
@@ -127,14 +138,16 @@ function Column({
           <EntityBadge meta={TASK_STATUS[status]} />
           <span className="text-xs tabular-nums text-muted-foreground">{tasks.length}</span>
         </div>
-        <button
-          type="button"
-          onClick={() => onAdd(status)}
-          className="grid h-6 w-6 cursor-pointer place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          aria-label="Nova tarefa nesta coluna"
-        >
-          <Plus className="h-4 w-4" />
-        </button>
+        {onAdd && (
+          <button
+            type="button"
+            onClick={() => onAdd(status)}
+            className="grid h-6 w-6 cursor-pointer place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            aria-label="Nova tarefa nesta coluna"
+          >
+            <Plus className="h-4 w-4" />
+          </button>
+        )}
       </div>
       <div
         ref={setNodeRef}
@@ -174,12 +187,16 @@ export function TasksKanban({
   const [editing, setEditing] = useState<TaskItem | null>(null)
   const [creatingStatus, setCreatingStatus] = useState<TaskStatus | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [showArchived, setShowArchived] = useState(false)
 
   // Sincroniza com o servidor após revalidação.
   useEffect(() => setItems(tasks), [tasks])
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
   const activeTask = items.find((t) => t.id === activeId) ?? null
+  // Arquivamento só quando há backend para isso (Manutenção).
+  const canArchive = !!handlers.onArchive
+  const visible = items.filter((t) => (showArchived ? t.archived : !t.archived))
 
   function handleDragStart(e: DragStartEvent) {
     setActiveId(String(e.active.id))
@@ -267,17 +284,62 @@ export function TasksKanban({
     toast.success('Tarefa excluída.')
   }
 
+  async function handleArchive() {
+    if (!editing) return
+    const target = editing
+    const prev = items
+    setItems((p) => p.map((t) => (t.id === target.id ? { ...t, archived: true } : t))) // otimista
+    setDialogOpen(false)
+    if (handlers.onArchive) {
+      const res = await handlers.onArchive(target.id)
+      if (!res.success) {
+        setItems(prev)
+        toast.error(res.message)
+        return
+      }
+    }
+    toast.success('Tarefa arquivada.')
+  }
+
+  async function handleUnarchive() {
+    if (!editing) return
+    const target = editing
+    const prev = items
+    setItems((p) => p.map((t) => (t.id === target.id ? { ...t, archived: false } : t))) // otimista
+    setDialogOpen(false)
+    if (handlers.onUnarchive) {
+      const res = await handlers.onUnarchive(target.id)
+      if (!res.success) {
+        setItems(prev)
+        toast.error(res.message)
+        return
+      }
+    }
+    toast.success('Tarefa reativada.')
+  }
+
   return (
     <>
+      {canArchive && (
+        <div className="mb-3 inline-flex items-center rounded-md border border-border bg-card p-0.5">
+          <button type="button" onClick={() => setShowArchived(false)} aria-pressed={!showArchived} className={segCls(!showArchived)}>
+            Ativas
+          </button>
+          <button type="button" onClick={() => setShowArchived(true)} aria-pressed={showArchived} className={segCls(showArchived)}>
+            Arquivadas
+          </button>
+        </div>
+      )}
+
       <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
         <div className="flex gap-3 overflow-x-auto pb-2">
           {COLUMNS.map((status) => (
             <Column
               key={status}
               status={status}
-              tasks={items.filter((t) => t.status === status)}
+              tasks={visible.filter((t) => t.status === status)}
               onOpen={openEdit}
-              onAdd={openCreate}
+              onAdd={showArchived ? undefined : openCreate}
             />
           ))}
         </div>
@@ -292,6 +354,8 @@ export function TasksKanban({
         allowRecurrence={allowRecurrence}
         onSubmit={handleSubmit}
         onDelete={editing ? handleDelete : undefined}
+        onArchive={canArchive && editing && !editing.archived ? handleArchive : undefined}
+        onUnarchive={canArchive && editing && editing.archived ? handleUnarchive : undefined}
       />
     </>
   )

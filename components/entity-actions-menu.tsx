@@ -101,6 +101,7 @@ export function EntityActionsMenu({
   onChanged,
   align = 'end',
   triggerClassName,
+  extraItems,
 }: {
   archived: boolean
   entityName: string
@@ -111,6 +112,8 @@ export function EntityActionsMenu({
   onChanged?: () => void
   align?: 'start' | 'end'
   triggerClassName?: string
+  /** Itens extras no topo do menu (ex.: ações de funil no kanban de Contatos). */
+  extraItems?: React.ReactNode
 }) {
   const [busy, setBusy] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
@@ -151,7 +154,13 @@ export function EntityActionsMenu({
           <MoreHorizontal className="h-4 w-4" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align={align} onClick={stop}>
-          {onEdit && !archived && (
+          {extraItems && (
+            <>
+              {extraItems}
+              <DropdownMenuSeparator />
+            </>
+          )}
+          {onEdit && (
             <DropdownMenuItem onClick={onEdit}>
               <Pencil />
               Editar

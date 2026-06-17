@@ -9,6 +9,8 @@ import { NewOpportunityDialog } from '@/components/opportunities/new-opportunity
 import { OpportunitiesKanban } from '@/components/opportunities/opportunities-kanban'
 import { ImplementationBoard } from '@/components/projects/implementation-board'
 import { MaintenanceList } from '@/components/projects/maintenance-list'
+import { EntityActionsMenu } from '@/components/entity-actions-menu'
+import { archiveProject, unarchiveProject, deleteProject } from '@/lib/actions/deals'
 import { DEAL_STAGE, PROJECT_STATUS, deliveryCountdown, formatCurrency, formatDate, isOverdue } from '@/lib/format'
 import type { OpportunityItem } from '@/components/opportunities/opportunity-card'
 import type { ImplementationItem, MaintenanceItem } from '@/lib/queries/projects-board'
@@ -49,8 +51,9 @@ const segCls = (active: boolean) =>
 
 /**
  * Tela de projetos focada numa fase.
- * Venda (/projetos): board comercial editável. Implementação e Manutenção (Operacional):
- * recortes read-only. A tela de implementação detalhada vive em /implementacao/[projectId].
+ * Venda (/projetos): board comercial editável, com arquivar/excluir. Implementação e
+ * Manutenção (Operacional): recortes read-only. A implementação detalhada vive em
+ * /implementacao/[projectId].
  */
 export function ProjectsView({
   phase,
@@ -58,18 +61,20 @@ export function ProjectsView({
   implementation = [],
   maintenance = [],
   contacts = [],
+  archived = false,
 }: {
   phase: Phase
   sale?: OpportunityItem[]
   implementation?: ImplementationItem[]
   maintenance?: MaintenanceItem[]
   contacts?: CompanyOption[]
+  archived?: boolean
 }) {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
-  const view = searchParams.get('view') === 'kanban' ? 'kanban' : 'lista'
+  const view = !archived && searchParams.get('view') === 'kanban' ? 'kanban' : 'lista'
   const [search, setSearch] = useState('')
   const [stage, setStage] = useState<DealStage | 'all'>('all')
 
@@ -77,6 +82,14 @@ export function ProjectsView({
     const params = new URLSearchParams(searchParams.toString())
     if (next === 'lista') params.delete('view')
     else params.set('view', next)
+    router.push(`${pathname}?${params.toString()}`)
+  }
+
+  function setArchived(next: boolean) {
+    const params = new URLSearchParams(searchParams.toString())
+    if (next) params.set('arquivados', '1')
+    else params.delete('arquivados')
+    params.delete('view') // arquivados sempre como lista
     router.push(`${pathname}?${params.toString()}`)
   }
 
@@ -109,17 +122,27 @@ export function ProjectsView({
     [maintenance, q],
   )
 
-  const showViewToggle = phase !== 'manutencao'
+  const showViewToggle = phase === 'venda' && !archived
 
   return (
     <div className="space-y-4">
       {/* Cabeçalho */}
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold tracking-tight">{PHASE_TITLE[phase]}</h2>
-          <p className="text-sm text-muted-foreground">{PHASE_SUBTITLE[phase]}</p>
+          <h2 className="text-lg font-semibold tracking-tight">
+            {archived && phase === 'venda'
+              ? 'Projetos arquivados'
+              : archived && phase === 'manutencao'
+                ? 'Manutenção arquivada'
+                : PHASE_TITLE[phase]}
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            {archived && (phase === 'venda' || phase === 'manutencao')
+              ? 'Reative ou exclua permanentemente.'
+              : PHASE_SUBTITLE[phase]}
+          </p>
         </div>
-        {phase === 'venda' && <NewOpportunityDialog contacts={contacts} />}
+        {phase === 'venda' && !archived && <NewOpportunityDialog contacts={contacts} />}
       </header>
 
       {/* Filtros + alternância de visão */}
@@ -134,7 +157,7 @@ export function ProjectsView({
           />
         </div>
 
-        {phase === 'venda' && (
+        {phase === 'venda' && !archived && (
           <select
             value={stage}
             onChange={(e) => setStage(e.target.value as DealStage | 'all')}
@@ -152,8 +175,20 @@ export function ProjectsView({
 
         <PeriodFilter />
 
-        {showViewToggle && (
+        {/* Toggle Ativos / Arquivados (venda e manutenção) */}
+        {(phase === 'venda' || phase === 'manutencao') && (
           <div className="ml-auto inline-flex items-center rounded-md border border-border bg-card p-0.5">
+            <button type="button" onClick={() => setArchived(false)} aria-pressed={!archived} className={segCls(!archived)}>
+              Ativos
+            </button>
+            <button type="button" onClick={() => setArchived(true)} aria-pressed={archived} className={segCls(archived)}>
+              Arquivados
+            </button>
+          </div>
+        )}
+
+        {showViewToggle && (
+          <div className="inline-flex items-center rounded-md border border-border bg-card p-0.5">
             <button type="button" onClick={() => setView('lista')} aria-pressed={view === 'lista'} className={segCls(view === 'lista')}>
               <List className="h-4 w-4" />
               Lista
@@ -169,9 +204,12 @@ export function ProjectsView({
       {/* Conteúdo por fase */}
       {phase === 'venda' && (
         view === 'kanban' ? (
-          <OpportunitiesKanban items={saleRows} />
+          <OpportunitiesKanban items={saleRows} archived={archived} />
         ) : saleRows.length === 0 ? (
-          <EmptyState message="Nenhum projeto em venda" hint="Crie um projeto ou ajuste a busca." />
+          <EmptyState
+            message={archived ? 'Nenhum projeto arquivado' : 'Nenhum projeto em venda'}
+            hint={archived ? 'Projetos arquivados aparecem aqui.' : 'Crie um projeto ou ajuste a busca.'}
+          />
         ) : (
           <div className="overflow-hidden rounded-lg border border-border bg-card">
             <table className="w-full text-sm">
@@ -181,6 +219,7 @@ export function ProjectsView({
                   <th className="px-3 py-2 font-medium">Cliente</th>
                   <th className="px-3 py-2 font-medium">Estágio</th>
                   <th className="px-3 py-2 text-right font-medium">Valor</th>
+                  <th className="w-10 px-3 py-2" />
                 </tr>
               </thead>
               <tbody>
@@ -197,6 +236,17 @@ export function ProjectsView({
                     </td>
                     <td className="px-3 py-2 text-right font-mono tabular-nums">
                       {i.value != null ? formatCurrency(i.value) : '—'}
+                    </td>
+                    <td className="px-3 py-2 text-right" onClick={(e) => e.stopPropagation()}>
+                      <EntityActionsMenu
+                        archived={archived}
+                        entityName={i.project}
+                        onEdit={() => router.push(`/projetos/${i.id}`)}
+                        archiveAction={() => archiveProject(i.id)}
+                        unarchiveAction={() => unarchiveProject(i.id)}
+                        deleteAction={() => deleteProject(i.id)}
+                        onChanged={() => router.refresh()}
+                      />
                     </td>
                   </tr>
                 ))}
@@ -253,7 +303,7 @@ export function ProjectsView({
         )
       )}
 
-      {phase === 'manutencao' && <MaintenanceList items={maintRows} />}
+      {phase === 'manutencao' && <MaintenanceList items={maintRows} archived={archived} />}
     </div>
   )
 }

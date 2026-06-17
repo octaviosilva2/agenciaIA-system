@@ -20,6 +20,7 @@ export default async function ContatosPage({
     ? []
     : contactsBoardDeals(await getDealsBoard()).map((d) => ({
         id: d.id,
+        companyId: d.companyId,
         company: d.company,
         title: d.title,
         stage: d.stage,

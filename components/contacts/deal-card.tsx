@@ -1,22 +1,14 @@
 'use client'
 
 import { useDraggable } from '@dnd-kit/core'
-import { MoreHorizontal, Clock, XCircle, Ban } from 'lucide-react'
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-} from '@/components/ui/dropdown-menu'
-import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/format'
-import { canDisqualify, type DealStage } from '@/lib/rules/deal-stage'
+import { type DealStage } from '@/lib/rules/deal-stage'
 
 /** Deal exibido no kanban (forma do dado que a query vai entregar depois). */
 export type KanbanDeal = {
   id: string
+  companyId: string
   company: string
   title: string
   stage: DealStage
@@ -45,11 +37,12 @@ export type DealAction = 'perder' | 'reativar' | 'desqualificar'
 export function DealCardContent({
   deal,
   dragging = false,
-  onAction,
+  menu,
 }: {
   deal: KanbanDeal
   dragging?: boolean
-  onAction?: (action: DealAction, deal: KanbanDeal) => void
+  /** Menu de ações (⋯) no canto superior direito — montado pelo board. */
+  menu?: React.ReactNode
 }) {
   const isTerminal = TERMINAL_CARD_STAGES.includes(deal.stage)
   // No fechado, a manutenção é só descrição (não badge separado).
@@ -70,42 +63,7 @@ export function DealCardContent({
           <p className="truncate text-sm font-medium">{deal.company}</p>
           <p className="truncate text-xs text-muted-foreground">{deal.title}</p>
         </div>
-        {onAction && !isTerminal && (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  className="h-6 w-6 shrink-0"
-                  aria-label="Ações do negócio"
-                  // impede o sensor de drag de capturar o clique no menu
-                  onPointerDown={(e) => e.stopPropagation()}
-                />
-              }
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => onAction('reativar', deal)}>
-                <Clock />
-                Reativar futuramente
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={!canDisqualify(deal.stage)}
-                onClick={() => onAction('desqualificar', deal)}
-              >
-                <Ban />
-                Desqualificar
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem variant="destructive" onClick={() => onAction('perder', deal)}>
-                <XCircle />
-                Marcar como perdido
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
+        {menu}
       </div>
 
       {outcomeNote ? (
@@ -129,10 +87,10 @@ export function DealCardContent({
 /** Card arrastável (dnd-kit) que envolve o conteúdo. */
 export function DraggableDealCard({
   deal,
-  onAction,
+  menu,
 }: {
   deal: KanbanDeal
-  onAction: (action: DealAction, deal: KanbanDeal) => void
+  menu?: React.ReactNode
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: deal.id })
 
@@ -143,7 +101,7 @@ export function DraggableDealCard({
       {...listeners}
       className="touch-none cursor-grab active:cursor-grabbing"
     >
-      <DealCardContent deal={deal} dragging={isDragging} onAction={onAction} />
+      <DealCardContent deal={deal} dragging={isDragging} menu={menu} />
     </div>
   )
 }

@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { Clock, Ban, XCircle } from 'lucide-react'
 import {
   DndContext,
   DragOverlay,
@@ -25,7 +27,7 @@ import { Button } from '@/components/ui/button'
 import { EntityBadge } from '@/components/ui/entity-badge'
 import { cn } from '@/lib/utils'
 import { DEAL_STAGE } from '@/lib/format'
-import { validateStageTransition, type DealStage } from '@/lib/rules/deal-stage'
+import { validateStageTransition, canDisqualify, type DealStage } from '@/lib/rules/deal-stage'
 import {
   changeDealStage,
   createProjectAndAdvance,
@@ -39,6 +41,9 @@ import {
   type KanbanDeal,
   type DealAction,
 } from '@/components/contacts/deal-card'
+import { EntityActionsMenu } from '@/components/entity-actions-menu'
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
+import { archiveContact, deleteContact } from '@/lib/actions/contacts'
 
 /** Coluna terminal à ESQUERDA de Prospect: contatos desqualificados (read-only). */
 const LEFT_TERMINAL_COLUMNS: DealStage[] = ['desqualificado']
@@ -67,12 +72,12 @@ function Column({
   stage,
   deals,
   terminal = false,
-  onAction,
+  renderMenu,
 }: {
   stage: DealStage
   deals: KanbanDeal[]
   terminal?: boolean
-  onAction: (action: DealAction, deal: KanbanDeal) => void
+  renderMenu: (deal: KanbanDeal, terminal: boolean) => React.ReactNode
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage, disabled: terminal })
 
@@ -96,9 +101,9 @@ function Column({
         {deals.length === 0 ? (
           <p className="px-1 py-6 text-center text-xs text-muted-foreground">Vazio</p>
         ) : terminal ? (
-          deals.map((d) => <DealCardContent key={d.id} deal={d} />)
+          deals.map((d) => <DealCardContent key={d.id} deal={d} menu={renderMenu(d, true)} />)
         ) : (
-          deals.map((d) => <DraggableDealCard key={d.id} deal={d} onAction={onAction} />)
+          deals.map((d) => <DraggableDealCard key={d.id} deal={d} menu={renderMenu(d, false)} />)
         )}
       </div>
     </div>
@@ -121,8 +126,43 @@ export function ContactsKanban({ deals: dealsProp }: { deals: KanbanDeal[] }) {
   const [lostDeal, setLostDeal] = useState<KanbanDeal | null>(null)
   const [lostReason, setLostReason] = useState('')
 
+  const router = useRouter()
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
   const activeDeal = deals.find((d) => d.id === activeId) ?? null
+
+  /** Menu ⋯ do card: ações de funil (extras) + arquivar/excluir/editar do contato. */
+  function renderMenu(deal: KanbanDeal, terminal: boolean) {
+    const funnel = !terminal ? (
+      <>
+        <DropdownMenuItem onClick={() => handleAction('reativar', deal)}>
+          <Clock />
+          Reativar futuramente
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          disabled={!canDisqualify(deal.stage)}
+          onClick={() => handleAction('desqualificar', deal)}
+        >
+          <Ban />
+          Desqualificar
+        </DropdownMenuItem>
+        <DropdownMenuItem variant="destructive" onClick={() => handleAction('perder', deal)}>
+          <XCircle />
+          Marcar como perdido
+        </DropdownMenuItem>
+      </>
+    ) : undefined
+    return (
+      <EntityActionsMenu
+        archived={false}
+        entityName={deal.company}
+        onEdit={() => router.push(`/contatos/${deal.companyId}`)}
+        archiveAction={() => archiveContact(deal.companyId)}
+        deleteAction={() => deleteContact(deal.companyId)}
+        onChanged={() => router.refresh()}
+        extraItems={funnel}
+      />
+    )
+  }
 
   function patchStage(id: string, stage: DealStage, hasProject?: boolean) {
     setDeals((prev) =>
@@ -260,7 +300,7 @@ export function ContactsKanban({ deals: dealsProp }: { deals: KanbanDeal[] }) {
               stage={stage}
               terminal
               deals={deals.filter((d) => d.stage === stage)}
-              onAction={handleAction}
+              renderMenu={renderMenu}
             />
           ))}
 
@@ -271,7 +311,7 @@ export function ContactsKanban({ deals: dealsProp }: { deals: KanbanDeal[] }) {
               key={stage}
               stage={stage}
               deals={deals.filter((d) => d.stage === stage)}
-              onAction={handleAction}
+              renderMenu={renderMenu}
             />
           ))}
 
@@ -284,7 +324,7 @@ export function ContactsKanban({ deals: dealsProp }: { deals: KanbanDeal[] }) {
               stage={stage}
               terminal
               deals={deals.filter((d) => d.stage === stage)}
-              onAction={handleAction}
+              renderMenu={renderMenu}
             />
           ))}
         </div>

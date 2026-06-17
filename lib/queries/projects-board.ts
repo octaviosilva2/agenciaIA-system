@@ -69,6 +69,7 @@ export async function getImplementationBoard(): Promise<ImplementationItem[]> {
     `,
     )
     .eq('stage', 'fechado')
+    .is('archived_at', null)
     .order('created_at', { ascending: false })
 
   if (error) throw new Error(`Falha ao carregar implementação: ${error.message}`)
@@ -104,10 +105,10 @@ type RawContract = {
   project: { name: string; deal_id: string | null } | { name: string; deal_id: string | null }[] | null
 }
 
-/** Contratos de manutenção ativos. */
-export async function getMaintenanceBoard(): Promise<MaintenanceItem[]> {
+/** Contratos de manutenção ativos. `archived` alterna a visão (ativos × arquivados). */
+export async function getMaintenanceBoard(archived = false): Promise<MaintenanceItem[]> {
   const supabase = await createClient()
-  const { data, error } = await supabase
+  let query = supabase
     .from('contracts')
     .select(
       `
@@ -117,7 +118,10 @@ export async function getMaintenanceBoard(): Promise<MaintenanceItem[]> {
     `,
     )
     .eq('status', 'ativo')
-    .order('start_date', { ascending: false })
+
+  query = archived ? query.not('archived_at', 'is', null) : query.is('archived_at', null)
+
+  const { data, error } = await query.order('start_date', { ascending: false })
 
   if (error) throw new Error(`Falha ao carregar manutenção: ${error.message}`)
 

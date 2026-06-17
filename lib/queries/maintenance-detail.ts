@@ -19,6 +19,7 @@ type RawContract = {
   contact_frequency_days: number | null
   sla: string | null
   notes: string | null
+  archived_at: string | null
   company: { id: string; name: string } | { id: string; name: string }[] | null
   project: { name: string; deal_id: string | null } | { name: string; deal_id: string | null }[] | null
 }
@@ -32,6 +33,7 @@ type RawTask = {
   due_date: string | null
   recurrence: 'none' | 'monthly'
   recurrence_day: number | null
+  archived_at: string | null
 }
 
 /** Tela de manutenção por contrato: dados do contrato + tarefas vinculadas. */
@@ -43,7 +45,7 @@ export async function getMaintenanceDetail(contractId: string): Promise<Maintena
     .select(
       `
       id, kind, status, monthly_value, min_months, billing_day, start_date,
-      next_contact_date, contact_frequency_days, sla, notes,
+      next_contact_date, contact_frequency_days, sla, notes, archived_at,
       company:companies ( id, name ),
       project:projects ( name, deal_id )
     `,
@@ -58,7 +60,7 @@ export async function getMaintenanceDetail(contractId: string): Promise<Maintena
 
   const { data: tasksData, error: tErr } = await supabase
     .from('tasks')
-    .select('id, title, description, status, priority, due_date, recurrence, recurrence_day')
+    .select('id, title, description, status, priority, due_date, recurrence, recurrence_day, archived_at')
     .eq('contract_id', contractId)
     .order('created_at', { ascending: true })
 
@@ -75,6 +77,7 @@ export async function getMaintenanceDetail(contractId: string): Promise<Maintena
     dueDate: t.due_date,
     recurrence: t.recurrence,
     recurrenceDay: t.recurrence_day,
+    archived: t.archived_at != null,
   }))
 
   return {
@@ -93,6 +96,7 @@ export async function getMaintenanceDetail(contractId: string): Promise<Maintena
     contactFrequencyDays: ct.contact_frequency_days,
     sla: ct.sla,
     notes: ct.notes,
+    archived: ct.archived_at != null,
     tasks,
   }
 }

@@ -11,19 +11,31 @@ import {
   formatDate,
   isOverdue,
 } from '@/lib/format'
+import { EntityActionsMenu } from '@/components/entity-actions-menu'
+import { archiveContract, unarchiveContract, deleteContract } from '@/lib/actions/contracts'
 import type { MaintenanceItem } from '@/lib/queries/projects-board'
 
-/** Lista de contratos de manutenção ativos (read-only; gestão na área Financeiro). */
-export function MaintenanceList({ items }: { items: MaintenanceItem[] }) {
+/** Lista de contratos de manutenção (kebab para arquivar/excluir; visão ativa × arquivada). */
+export function MaintenanceList({
+  items,
+  archived = false,
+}: {
+  items: MaintenanceItem[]
+  archived?: boolean
+}) {
   const router = useRouter()
 
   if (items.length === 0) {
     return (
       <div className="grid place-items-center rounded-lg border border-dashed border-border bg-card p-10 text-center">
         <Inbox className="h-6 w-6 text-muted-foreground/50" />
-        <p className="mt-2 text-sm font-medium">Nenhum contrato de manutenção ativo</p>
+        <p className="mt-2 text-sm font-medium">
+          {archived ? 'Nenhuma manutenção arquivada' : 'Nenhum contrato de manutenção ativo'}
+        </p>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          Contratos nascem ao fechar um negócio com manutenção.
+          {archived
+            ? 'Contratos arquivados aparecem aqui.'
+            : 'Contratos nascem ao fechar um negócio com manutenção.'}
         </p>
       </div>
     )
@@ -40,6 +52,7 @@ export function MaintenanceList({ items }: { items: MaintenanceItem[] }) {
             <th className="px-3 py-2 text-right font-medium">Valor mensal</th>
             <th className="px-3 py-2 font-medium">Próximo contato</th>
             <th className="px-3 py-2 font-medium">Status</th>
+            <th className="w-10 px-3 py-2" />
           </tr>
         </thead>
         <tbody>
@@ -68,6 +81,16 @@ export function MaintenanceList({ items }: { items: MaintenanceItem[] }) {
                 <td className="px-3 py-2">
                   <EntityBadge
                     meta={{ label: CONTRACT_STATUS_LABELS[c.status], className: TONE.green }}
+                  />
+                </td>
+                <td className="px-3 py-2 text-right" onClick={(e) => e.stopPropagation()}>
+                  <EntityActionsMenu
+                    archived={archived}
+                    entityName={c.projectName ?? c.company}
+                    archiveAction={() => archiveContract(c.id)}
+                    unarchiveAction={() => unarchiveContract(c.id)}
+                    deleteAction={() => deleteContract(c.id)}
+                    onChanged={() => router.refresh()}
                   />
                 </td>
               </tr>

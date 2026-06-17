@@ -9,7 +9,8 @@ import { ProposalEditor } from '@/components/opportunities/proposal-editor'
 import { PaymentEditor } from '@/components/projects/payment-editor'
 import { DeliveryControls } from '@/components/projects/delivery-controls'
 import { MaintenanceEditor } from '@/components/projects/maintenance-editor'
-import { DEAL_STAGE, PROJECT_STATUS, formatCurrency } from '@/lib/format'
+import { ProjectHeaderActions } from '@/components/projects/project-header-actions'
+import { DEAL_STAGE, PROJECT_STATUS, TONE, formatCurrency } from '@/lib/format'
 
 function SectionCard({
   title,
@@ -76,6 +77,9 @@ export default async function ProjetoDetailPage({
             <div className="flex items-center gap-2">
               <h2 className="text-lg font-semibold tracking-tight">{detail.project}</h2>
               <EntityBadge meta={DEAL_STAGE[detail.stage]} />
+              {detail.archived && (
+                <EntityBadge meta={{ label: 'Arquivado', className: TONE['zinc-faint'] }} />
+              )}
             </div>
             <p className="text-sm text-muted-foreground">
               Cliente:{' '}
@@ -84,10 +88,15 @@ export default async function ProjetoDetailPage({
               </Link>
             </p>
           </div>
-          <div className="text-right">
+          <div className="flex items-start gap-2">
             <p className="font-mono text-lg font-semibold tabular-nums">
               {headerValue != null ? formatCurrency(headerValue) : '—'}
             </p>
+            <ProjectHeaderActions
+              dealId={detail.dealId}
+              projectName={detail.project}
+              archived={detail.archived}
+            />
           </div>
         </div>
         <div className="mt-3 border-t border-border pt-3">

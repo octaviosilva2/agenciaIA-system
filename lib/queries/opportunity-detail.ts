@@ -50,6 +50,7 @@ export type OpportunityDetail = {
   projectId: string | null
   project: string
   stage: DealStage
+  archived: boolean
   isClosed: boolean // deal fechado → libera Implementação/Manutenção
   estimatedValue: number | null
   totalValue: number | null // valor da proposta (projects.total_value)
@@ -115,6 +116,7 @@ type Raw = {
   stage: DealStage
   estimated_value: number | null
   has_maintenance: boolean | null
+  archived_at: string | null
   company: { id: string; name: string } | { id: string; name: string }[] | null
   projects: RawProject[]
   activities: { id: string; type: string; content: string; occurred_at: string | null }[]
@@ -132,7 +134,7 @@ export async function getOpportunityDetail(dealId: string): Promise<OpportunityD
     .from('deals')
     .select(
       `
-      id, title, stage, estimated_value, has_maintenance,
+      id, title, stage, estimated_value, has_maintenance, archived_at,
       company:companies ( id, name ),
       projects (
         id, name, total_value, drive_url, notes, scope_items,
@@ -188,6 +190,7 @@ export async function getOpportunityDetail(dealId: string): Promise<OpportunityD
     projectId: project?.id ?? null,
     project: project?.name ?? d.title,
     stage: d.stage,
+    archived: d.archived_at != null,
     isClosed: d.stage === 'fechado',
     estimatedValue: d.estimated_value,
     totalValue: project?.total_value ?? null,

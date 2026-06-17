@@ -1,15 +1,6 @@
 'use client'
 
 import { useDraggable } from '@dnd-kit/core'
-import { MoreHorizontal, CheckCircle2, Clock, XCircle } from 'lucide-react'
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-} from '@/components/ui/dropdown-menu'
-import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/format'
 import type { DealStage } from '@/lib/rules/deal-stage'
@@ -36,16 +27,16 @@ const TERMINAL_CARD_STAGES: DealStage[] = ['fechado', 'perdido', 'reativar_futur
 export function OpportunityCardContent({
   item,
   dragging = false,
-  onAction,
   onOpen,
+  menu,
 }: {
   item: OpportunityItem
   dragging?: boolean
-  onAction?: (action: OpportunityAction, item: OpportunityItem) => void
   /** Quando presente, o corpo do card vira clicável (abre o projeto). */
   onOpen?: () => void
+  /** Menu de ações (⋯) no canto superior direito — montado pelo board. */
+  menu?: React.ReactNode
 }) {
-  const isTerminal = TERMINAL_CARD_STAGES.includes(item.stage)
   const outcomeNote =
     item.stage === 'fechado' && item.maintenance
       ? `Fechado · ${item.maintenance === 'com' ? 'com' : 'sem'} manutenção`
@@ -65,38 +56,7 @@ export function OpportunityCardContent({
           <p className="truncate text-sm font-medium">{item.project}</p>
           <p className="truncate text-xs text-muted-foreground">{item.company}</p>
         </div>
-        {onAction && !isTerminal && (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  className="h-6 w-6 shrink-0"
-                  aria-label="Ações da oportunidade"
-                  onPointerDown={(e) => e.stopPropagation()}
-                />
-              }
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => onAction('fechar', item)}>
-                <CheckCircle2 />
-                Fechar negócio
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onAction('reativar', item)}>
-                <Clock />
-                Reativar futuramente
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem variant="destructive" onClick={() => onAction('perder', item)}>
-                <XCircle />
-                Marcar como perdido
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
+        {menu}
       </div>
 
       {outcomeNote && (
@@ -115,10 +75,10 @@ export function OpportunityCardContent({
 /** Card arrastável (dnd-kit). */
 export function DraggableOpportunityCard({
   item,
-  onAction,
+  menu,
 }: {
   item: OpportunityItem
-  onAction: (action: OpportunityAction, item: OpportunityItem) => void
+  menu?: React.ReactNode
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: item.id })
 
@@ -129,7 +89,7 @@ export function DraggableOpportunityCard({
       {...listeners}
       className="touch-none cursor-grab active:cursor-grabbing"
     >
-      <OpportunityCardContent item={item} dragging={isDragging} onAction={onAction} />
+      <OpportunityCardContent item={item} dragging={isDragging} menu={menu} />
     </div>
   )
 }

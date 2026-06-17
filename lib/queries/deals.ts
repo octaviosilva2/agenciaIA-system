@@ -17,10 +17,13 @@ export type BoardDeal = {
   projectName: string | null
   /** Só quando stage='fechado': 'com'/'sem' manutenção (para a descrição do card). */
   maintenance: 'com' | 'sem' | null
+  /** Arquivamento (soft delete). archived = o próprio deal; companyArchived = o contato dono. */
+  archived: boolean
+  companyArchived: boolean
 }
 
 // Forma bruta do Supabase (client não tipado → cast local, sem `any`).
-type RawCompany = { id: string; name: string }
+type RawCompany = { id: string; name: string; archived_at: string | null }
 type RawCharge = { amount: number; kind: string; status: string }
 type RawProject = { id: string; name: string; total_value: number | null; charges: RawCharge[] | null }
 type RawDeal = {
@@ -30,6 +33,7 @@ type RawDeal = {
   estimated_value: number | null
   next_action: string | null
   has_maintenance: boolean | null
+  archived_at: string | null
   company: RawCompany | RawCompany[] | null
   projects: RawProject[]
 }
@@ -53,8 +57,8 @@ export async function getDealsBoard(): Promise<BoardDeal[]> {
     .from('deals')
     .select(
       `
-      id, title, stage, estimated_value, next_action, has_maintenance,
-      company:companies!inner ( id, name ),
+      id, title, stage, estimated_value, next_action, has_maintenance, archived_at,
+      company:companies!inner ( id, name, archived_at ),
       projects ( id, name, total_value, charges ( amount, kind, status ) )
     `,
     )
@@ -85,6 +89,8 @@ export async function getDealsBoard(): Promise<BoardDeal[]> {
       projectId: project?.id ?? null,
       projectName: project?.name ?? null,
       maintenance: d.stage === 'fechado' ? (d.has_maintenance ? 'com' : 'sem') : null,
+      archived: d.archived_at != null,
+      companyArchived: company?.archived_at != null,
     }
   })
 }
@@ -92,16 +98,22 @@ export async function getDealsBoard(): Promise<BoardDeal[]> {
 /** Estágios da venda — não aparecem no kanban de Contatos (vivem em Oportunidades). */
 const SALE_ONLY_STAGES: DealStage[] = ['escopo', 'proposta', 'negociacao']
 
-/** Deals do kanban de Contatos: todos menos os estágios exclusivos da venda. */
+/** Deals do kanban de Contatos: pré-venda, sem arquivados nem de contato arquivado. */
 export function contactsBoardDeals(deals: BoardDeal[]): BoardDeal[] {
-  return deals.filter((d) => !SALE_ONLY_STAGES.includes(d.stage))
+  return deals.filter(
+    (d) => !SALE_ONLY_STAGES.includes(d.stage) && !d.archived && !d.companyArchived,
+  )
 }
 
 /**
  * Deals da aba Projetos (continuidade comercial do contato): todos os que já têm
  * projeto vinculado, em qualquer estágio — ativos E terminais (fechado/perdido/reativar).
- * O fechado também aparece na Implementação (Operacional), com outro propósito.
+ * `archived=false` esconde projetos arquivados e de contatos arquivados (cascata);
+ * `archived=true` mostra os projetos explicitamente arquivados.
  */
-export function opportunitiesBoardDeals(deals: BoardDeal[]): BoardDeal[] {
-  return deals.filter((d) => d.hasProject)
+export function opportunitiesBoardDeals(deals: BoardDeal[], archived = false): BoardDeal[] {
+  return deals.filter((d) => {
+    if (!d.hasProject) return false
+    return archived ? d.archived : !d.archived && !d.companyArchived
+  })
 }

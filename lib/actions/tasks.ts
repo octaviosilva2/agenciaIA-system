@@ -170,3 +170,26 @@ export async function deleteMaintenanceTask(contractId: string, id: string): Pro
   revalidatePath(`/manutencao/${contractId}`)
   return { success: true, message: 'Tarefa excluída.' }
 }
+
+/** Arquiva uma tarefa de manutenção (some do kanban ativo; reversível). */
+export async function archiveMaintenanceTask(contractId: string, id: string): Promise<ActionState> {
+  const supabase = await createClient()
+  const { error } = await supabase
+    .from('tasks')
+    .update({ archived_at: new Date().toISOString() })
+    .eq('id', id)
+  if (error) return { success: false, message: `Erro ao arquivar tarefa: ${error.message}` }
+
+  revalidatePath(`/manutencao/${contractId}`)
+  return { success: true, message: 'Tarefa arquivada.' }
+}
+
+/** Reativa (desarquiva) uma tarefa de manutenção. */
+export async function unarchiveMaintenanceTask(contractId: string, id: string): Promise<ActionState> {
+  const supabase = await createClient()
+  const { error } = await supabase.from('tasks').update({ archived_at: null }).eq('id', id)
+  if (error) return { success: false, message: `Erro ao reativar tarefa: ${error.message}` }
+
+  revalidatePath(`/manutencao/${contractId}`)
+  return { success: true, message: 'Tarefa reativada.' }
+}

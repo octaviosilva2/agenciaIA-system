@@ -13,8 +13,12 @@ import {
   updateMaintenanceTask,
   moveMaintenanceTask,
   deleteMaintenanceTask,
+  archiveMaintenanceTask,
+  unarchiveMaintenanceTask,
 } from '@/lib/actions/tasks'
 import { updateMaintenanceContract } from '@/lib/actions/project'
+import { EntityActionsMenu } from '@/components/entity-actions-menu'
+import { archiveContract, unarchiveContract, deleteContract } from '@/lib/actions/contracts'
 import {
   CONTRACT_KIND_LABELS,
   CONTRACT_STATUS_LABELS,
@@ -45,6 +49,7 @@ export type MaintenanceDetailData = {
   contactFrequencyDays: number | null
   sla: string | null
   notes: string | null
+  archived: boolean
   tasks: TaskItem[]
 }
 
@@ -148,6 +153,9 @@ export function MaintenanceDetail({ data }: { data: MaintenanceDetailData }) {
                   className: data.status === 'ativo' ? TONE.green : TONE['zinc-faint'],
                 }}
               />
+              {data.archived && (
+                <EntityBadge meta={{ label: 'Arquivado', className: TONE['zinc-faint'] }} />
+              )}
             </div>
             <p className="text-sm text-muted-foreground">
               {data.projectName ? (
@@ -168,13 +176,25 @@ export function MaintenanceDetail({ data }: { data: MaintenanceDetailData }) {
               </Link>
             </p>
           </div>
-          <div className="text-right">
+          <div className="flex items-start gap-2">
             <p className="font-mono text-lg font-semibold tabular-nums">
               {formatCurrency(monthlyValue)}
               {data.kind === 'mensal' && (
                 <span className="ml-1 text-xs font-normal text-muted-foreground">/mês</span>
               )}
             </p>
+            <EntityActionsMenu
+              archived={data.archived}
+              entityName={data.projectName ?? data.company}
+              archiveAction={() => archiveContract(data.contractId)}
+              unarchiveAction={() => unarchiveContract(data.contractId)}
+              deleteAction={async () => {
+                const res = await deleteContract(data.contractId)
+                if (res.success) router.push('/manutencao')
+                return res
+              }}
+              onChanged={() => router.refresh()}
+            />
           </div>
         </div>
       </header>
@@ -335,6 +355,8 @@ export function MaintenanceDetail({ data }: { data: MaintenanceDetailData }) {
             onUpdate: (id, draft) => updateMaintenanceTask(data.contractId, id, draft),
             onMove: (id, status) => moveMaintenanceTask(data.contractId, id, status),
             onDelete: (id) => deleteMaintenanceTask(data.contractId, id),
+            onArchive: (id) => archiveMaintenanceTask(data.contractId, id),
+            onUnarchive: (id) => unarchiveMaintenanceTask(data.contractId, id),
           }}
         />
       </SectionCard>

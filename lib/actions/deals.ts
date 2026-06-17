@@ -247,3 +247,48 @@ export async function createOpportunity(
   revalidateBoards()
   return { success: true, message: 'Oportunidade criada.' }
 }
+
+// =====================================================================
+// Arquivamento (soft delete) do projeto = o deal. Some de Projetos e
+// Implementação quando arquivado; reversível. Excluir é permanente.
+// =====================================================================
+
+function revalidateProjectBoards() {
+  revalidateBoards()
+  revalidatePath('/implementacao')
+}
+
+/** Arquiva um projeto (o deal). */
+export async function archiveProject(dealId: string): Promise<ActionState> {
+  const supabase = await createClient()
+  const { error } = await supabase
+    .from('deals')
+    .update({ archived_at: new Date().toISOString() })
+    .eq('id', dealId)
+  if (error) return { success: false, message: `Erro ao arquivar: ${error.message}` }
+  revalidateProjectBoards()
+  return { success: true, message: 'Projeto arquivado.' }
+}
+
+/** Reativa (desarquiva) um projeto. */
+export async function unarchiveProject(dealId: string): Promise<ActionState> {
+  const supabase = await createClient()
+  const { error } = await supabase.from('deals').update({ archived_at: null }).eq('id', dealId)
+  if (error) return { success: false, message: `Erro ao reativar: ${error.message}` }
+  revalidateProjectBoards()
+  return { success: true, message: 'Projeto reativado.' }
+}
+
+/**
+ * Exclui um projeto PERMANENTEMENTE: apaga o(s) project(s) vinculado(s) e o deal.
+ * (Deletar o deal só faria SET NULL em projects.deal_id, então removemos os projects antes.)
+ */
+export async function deleteProject(dealId: string): Promise<ActionState> {
+  const supabase = await createClient()
+  const { error: pErr } = await supabase.from('projects').delete().eq('deal_id', dealId)
+  if (pErr) return { success: false, message: `Erro ao excluir projeto: ${pErr.message}` }
+  const { error } = await supabase.from('deals').delete().eq('id', dealId)
+  if (error) return { success: false, message: `Erro ao excluir: ${error.message}` }
+  revalidateProjectBoards()
+  return { success: true, message: 'Projeto excluído permanentemente.' }
+}

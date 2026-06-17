@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { CheckCircle2, Clock, XCircle } from 'lucide-react'
 import {
   DndContext,
   DragOverlay,
@@ -27,13 +28,23 @@ import { EntityBadge } from '@/components/ui/entity-badge'
 import { cn } from '@/lib/utils'
 import { DEAL_STAGE } from '@/lib/format'
 import { type DealStage } from '@/lib/rules/deal-stage'
-import { changeDealStage, closeDeal, loseDeal, reactivateDeal } from '@/lib/actions/deals'
+import {
+  changeDealStage,
+  closeDeal,
+  loseDeal,
+  reactivateDeal,
+  archiveProject,
+  unarchiveProject,
+  deleteProject,
+} from '@/lib/actions/deals'
 import {
   DraggableOpportunityCard,
   OpportunityCardContent,
   type OpportunityItem,
   type OpportunityAction,
 } from '@/components/opportunities/opportunity-card'
+import { EntityActionsMenu } from '@/components/entity-actions-menu'
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
 
 /** Colunas ARRASTÁVEIS da venda. */
 const ACTIVE_COLUMNS: DealStage[] = ['oportunidade', 'escopo', 'proposta', 'negociacao']
@@ -51,14 +62,14 @@ function Column({
   stage,
   items,
   terminal = false,
-  onAction,
   onOpen,
+  renderMenu,
 }: {
   stage: DealStage
   items: OpportunityItem[]
   terminal?: boolean
-  onAction: (action: OpportunityAction, item: OpportunityItem) => void
   onOpen?: (item: OpportunityItem) => void
+  renderMenu: (item: OpportunityItem) => React.ReactNode
 }) {
   // Em Projetos as terminais TAMBÉM recebem drag (desfecho via arrastar).
   const { setNodeRef, isOver } = useDroppable({ id: stage })
@@ -88,11 +99,12 @@ function Column({
               key={it.id}
               item={it}
               onOpen={onOpen ? () => onOpen(it) : undefined}
+              menu={renderMenu(it)}
             />
           ))
         ) : (
           items.map((it) => (
-            <DraggableOpportunityCard key={it.id} item={it} onAction={onAction} />
+            <DraggableOpportunityCard key={it.id} item={it} menu={renderMenu(it)} />
           ))
         )}
       </div>
@@ -100,7 +112,13 @@ function Column({
   )
 }
 
-export function OpportunitiesKanban({ items }: { items: OpportunityItem[] }) {
+export function OpportunitiesKanban({
+  items,
+  archived = false,
+}: {
+  items: OpportunityItem[]
+  archived?: boolean
+}) {
   const router = useRouter()
   const [deals, setDeals] = useState<OpportunityItem[]>(items)
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -118,6 +136,39 @@ export function OpportunitiesKanban({ items }: { items: OpportunityItem[] }) {
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
   const activeItem = deals.find((d) => d.id === activeId) ?? null
+
+  /** Menu ⋯ do card: desfechos (extras) + arquivar/excluir/editar do projeto. */
+  function renderMenu(item: OpportunityItem) {
+    const isTerminal = TERMINAL_COLUMNS.includes(item.stage)
+    const funnel = !isTerminal ? (
+      <>
+        <DropdownMenuItem onClick={() => handleAction('fechar', item)}>
+          <CheckCircle2 />
+          Fechar negócio
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => handleAction('reativar', item)}>
+          <Clock />
+          Reativar futuramente
+        </DropdownMenuItem>
+        <DropdownMenuItem variant="destructive" onClick={() => handleAction('perder', item)}>
+          <XCircle />
+          Marcar como perdido
+        </DropdownMenuItem>
+      </>
+    ) : undefined
+    return (
+      <EntityActionsMenu
+        archived={archived}
+        entityName={item.project}
+        onEdit={() => router.push(`/projetos/${item.id}`)}
+        archiveAction={() => archiveProject(item.id)}
+        unarchiveAction={() => unarchiveProject(item.id)}
+        deleteAction={() => deleteProject(item.id)}
+        onChanged={() => router.refresh()}
+        extraItems={funnel}
+      />
+    )
+  }
 
   function patchStage(id: string, stage: DealStage, maint?: 'com' | 'sem' | null) {
     setDeals((prev) => prev.map((d) => (d.id === id ? { ...d, stage, maintenance: maint ?? d.maintenance } : d)))
@@ -235,7 +286,7 @@ export function OpportunitiesKanban({ items }: { items: OpportunityItem[] }) {
               key={stage}
               stage={stage}
               items={deals.filter((d) => d.stage === stage)}
-              onAction={handleAction}
+              renderMenu={renderMenu}
             />
           ))}
 
@@ -248,7 +299,7 @@ export function OpportunitiesKanban({ items }: { items: OpportunityItem[] }) {
               stage={stage}
               terminal
               items={deals.filter((d) => d.stage === stage)}
-              onAction={handleAction}
+              renderMenu={renderMenu}
               onOpen={(it) => router.push(`/projetos/${it.id}`)}
             />
           ))}

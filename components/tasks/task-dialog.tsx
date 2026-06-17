@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Trash2 } from 'lucide-react'
+import { Trash2, Archive, ArchiveRestore } from 'lucide-react'
 import {
   Dialog,
   DialogClose,
@@ -62,6 +62,8 @@ export function TaskDialog({
   allowRecurrence = false,
   onSubmit,
   onDelete,
+  onArchive,
+  onUnarchive,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -70,6 +72,8 @@ export function TaskDialog({
   allowRecurrence?: boolean
   onSubmit: (draft: TaskDraft) => void
   onDelete?: () => void
+  onArchive?: () => void
+  onUnarchive?: () => void
 }) {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -223,19 +227,31 @@ export function TaskDialog({
         </div>
 
         <DialogFooter className="sm:justify-between">
-          {onDelete ? (
-            <Button
-              type="button"
-              variant="ghost"
-              className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-500/10"
-              onClick={onDelete}
-            >
-              <Trash2 className="h-4 w-4" />
-              Excluir
-            </Button>
-          ) : (
-            <span />
-          )}
+          <div className="flex flex-wrap gap-1">
+            {onDelete && (
+              <Button
+                type="button"
+                variant="ghost"
+                className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-500/10"
+                onClick={onDelete}
+              >
+                <Trash2 className="h-4 w-4" />
+                Excluir
+              </Button>
+            )}
+            {onArchive && (
+              <Button type="button" variant="ghost" onClick={onArchive}>
+                <Archive className="h-4 w-4" />
+                Arquivar
+              </Button>
+            )}
+            {onUnarchive && (
+              <Button type="button" variant="ghost" onClick={onUnarchive}>
+                <ArchiveRestore className="h-4 w-4" />
+                Reativar
+              </Button>
+            )}
+          </div>
           <div className="flex gap-2">
             <DialogClose render={<Button type="button" variant="outline">Cancelar</Button>} />
             <Button type="button" onClick={submit}>{task ? 'Salvar' : 'Criar tarefa'}</Button>
