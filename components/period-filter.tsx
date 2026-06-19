@@ -1,24 +1,14 @@
 'use client'
 
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Calendar } from '@/components/ui/calendar'
-import { CalendarIcon } from 'lucide-react'
-import { format } from 'date-fns'
-import { ptBR } from 'date-fns/locale'
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
 
-// Item do segmented control (mesmo padrão do toggle Lista/Kanban)
 const ITEM_BASE =
-  'flex h-8 items-center gap-1.5 rounded-[6px] px-2.5 text-xs font-medium transition-colors'
+  'flex h-8 cursor-pointer items-center gap-1.5 rounded-[6px] px-2.5 text-xs font-medium transition-colors'
 const ITEM_ACTIVE = 'bg-primary text-primary-foreground'
 const ITEM_IDLE = 'text-muted-foreground hover:bg-accent hover:text-foreground'
 
-/**
- * Filtro temporal reusado em todas as telas com dados temporais.
- * Grava nos query params ?de=&ate= para ser compartilhável.
- */
 const PERIODS = [
   { label: 'Todos', value: 'todos' },
   { label: 'Hoje', value: 'hoje' },
@@ -33,11 +23,11 @@ export function PeriodFilter() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const pathname = usePathname()
-  const [calendarOpen, setCalendarOpen] = useState(false)
+  const [open, setOpen] = useState(false)
 
   const currentPeriod = (searchParams.get('periodo') as PeriodValue) || 'todos'
-  const de = searchParams.get('de')
-  const ate = searchParams.get('ate')
+  const de = searchParams.get('de') ?? ''
+  const ate = searchParams.get('ate') ?? ''
 
   function setPeriod(value: PeriodValue) {
     const params = new URLSearchParams(searchParams.toString())
@@ -46,24 +36,35 @@ export function PeriodFilter() {
       params.set('periodo', 'todos')
       params.delete('de')
       params.delete('ate')
-    } else if (value === 'personalizado') {
-      params.set('periodo', value)
-      // Mantém de/ate existentes ou não seta
     } else {
       params.set('periodo', value)
-      params.delete('de')
-      params.delete('ate')
+      if (value !== 'personalizado') {
+        params.delete('de')
+        params.delete('ate')
+      }
     }
 
     router.push(`${pathname}?${params.toString()}`)
   }
 
-  function setCustomDates(from: Date | undefined, to: Date | undefined) {
+  function setCustomDate(field: 'de' | 'ate', value: string) {
     const params = new URLSearchParams(searchParams.toString())
     params.set('periodo', 'personalizado')
-    if (from) params.set('de', format(from, 'yyyy-MM-dd'))
-    if (to) params.set('ate', format(to, 'yyyy-MM-dd'))
+    if (value) params.set(field, value)
+    else params.delete(field)
     router.push(`${pathname}?${params.toString()}`)
+  }
+
+  /* Rótulo do botão: mostra o intervalo se ambas as datas estiverem definidas */
+  function customLabel() {
+    if (de && ate) {
+      const fmt = (s: string) => {
+        const [, m, d] = s.split('-')
+        return `${d}/${m}`
+      }
+      return `${fmt(de)} – ${fmt(ate)}`
+    }
+    return 'Personalizado'
   }
 
   return (
@@ -72,37 +73,46 @@ export function PeriodFilter() {
         if (p.value === 'personalizado') {
           const active = currentPeriod === 'personalizado'
           return (
-            <Popover key={p.value} open={calendarOpen} onOpenChange={setCalendarOpen}>
-              <PopoverTrigger
-                render={
-                  <button
-                    type="button"
-                    className={cn(ITEM_BASE, active ? ITEM_ACTIVE : ITEM_IDLE)}
-                  />
-                }
+            <div key={p.value} className="relative">
+              <button
+                type="button"
+                onClick={() => {
+                  setPeriod('personalizado')
+                  setOpen((o) => !o)
+                }}
+                className={cn(ITEM_BASE, active ? ITEM_ACTIVE : ITEM_IDLE)}
               >
-                <CalendarIcon className="h-3.5 w-3.5" />
-                {de && ate
-                  ? `${format(new Date(de), 'dd/MM', { locale: ptBR })} - ${format(new Date(ate), 'dd/MM', { locale: ptBR })}`
-                  : 'Personalizado'}
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="end">
-                <Calendar
-                  mode="range"
-                  selected={{
-                    from: de ? new Date(de) : undefined,
-                    to: ate ? new Date(ate) : undefined,
-                  }}
-                  onSelect={(range) => {
-                    if (range?.from && range?.to) {
-                      setCustomDates(range.from, range.to)
-                      setCalendarOpen(false)
-                    }
-                  }}
-                  locale={ptBR}
-                />
-              </PopoverContent>
-            </Popover>
+                {customLabel()}
+              </button>
+
+              {open && (
+                <>
+                  {/* backdrop para fechar ao clicar fora */}
+                  <div className="fixed inset-0 z-[9]" onClick={() => setOpen(false)} />
+
+                  {/* painel flutuante */}
+                  <div className="absolute right-0 top-full z-10 mt-1 flex items-center gap-1.5 rounded-md border border-border bg-popover px-3 py-2 shadow-md">
+                    <input
+                      type="date"
+                      value={de}
+                      onChange={(e) => setCustomDate('de', e.target.value)}
+                      className="h-7 rounded-md border border-border bg-background px-2 text-xs outline-none focus:ring-1 focus:ring-ring"
+                    />
+                    <span className="text-xs text-muted-foreground">–</span>
+                    <input
+                      type="date"
+                      value={ate}
+                      onChange={(e) => {
+                        setCustomDate('ate', e.target.value)
+                        /* fecha automaticamente quando ambas as datas estão preenchidas */
+                        if (de) setOpen(false)
+                      }}
+                      className="h-7 rounded-md border border-border bg-background px-2 text-xs outline-none focus:ring-1 focus:ring-ring"
+                    />
+                  </div>
+                </>
+              )}
+            </div>
           )
         }
 
@@ -111,7 +121,10 @@ export function PeriodFilter() {
           <button
             key={p.value}
             type="button"
-            onClick={() => setPeriod(p.value)}
+            onClick={() => {
+              setPeriod(p.value)
+              setOpen(false)
+            }}
             className={cn(ITEM_BASE, active ? ITEM_ACTIVE : ITEM_IDLE)}
           >
             {p.label}

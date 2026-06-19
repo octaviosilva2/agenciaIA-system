@@ -39,3 +39,20 @@ export const MOCK_IMPLEMENTATION: ImplementationSummary = {
   active: 4,
   completedThisMonth: 2,
 }
+
+/** Um ponto mensal para o gráfico de crescimento. */
+export type GrowthPoint = {
+  month: string    // abreviação PT-BR: "Jan", "Fev", ...
+  revenue: number  // receita total do mês
+  clients: number  // clientes ativos no mês
+}
+
+/** Dados de crescimento do ano corrente (Jan–Jun 2026). */
+export const MOCK_GROWTH_DATA: GrowthPoint[] = [
+  { month: 'Jan', revenue: 11000, clients: 6 },
+  { month: 'Fev', revenue: 12500, clients: 7 },
+  { month: 'Mar', revenue: 13800, clients: 8 },
+  { month: 'Abr', revenue: 15200, clients: 9 },
+  { month: 'Mai', revenue: 17500, clients: 11 },
+  { month: 'Jun', revenue: 19000, clients: 12 },
+]

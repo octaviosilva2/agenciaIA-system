@@ -14,7 +14,9 @@ import { DEAL_STAGE, formatCurrency } from '@/lib/format'
 import type {
   CommercialSummary,
   ImplementationSummary,
+  GrowthPoint,
 } from '@/lib/mock/dashboard'
+import { GrowthChart } from '@/components/dashboard/growth-chart'
 
 /** Resumo financeiro do mês corrente. */
 type FinanceSummary = {
@@ -101,11 +103,13 @@ export function DashboardView({
   commercial,
   implementation,
   nct,
+  growth,
 }: {
   finance: FinanceSummary
   commercial: CommercialSummary
   implementation: ImplementationSummary
   nct: NctSummary
+  growth: GrowthPoint[]
 }) {
   const activeDealsTotal = commercial.activeByStage.reduce((s, x) => s + x.count, 0)
 
@@ -205,6 +209,9 @@ export function DashboardView({
           </div>
         </BlockCard>
       </div>
+
+      {/* 5. Crescimento — full width abaixo dos cards */}
+      <GrowthChart data={growth} />
     </div>
   )
 }

@@ -1,7 +1,7 @@
 import { DashboardView } from '@/components/dashboard/dashboard-view'
 import { MOCK_CHARGES, MOCK_PAYABLES } from '@/lib/mock/finance'
 import { MOCK_COMMITMENTS, MOCK_NARRATIVES, MOCK_CHECKINS } from '@/lib/mock/nct'
-import { MOCK_COMMERCIAL, MOCK_IMPLEMENTATION } from '@/lib/mock/dashboard'
+import { MOCK_COMMERCIAL, MOCK_IMPLEMENTATION, MOCK_GROWTH_DATA } from '@/lib/mock/dashboard'
 
 /**
  * Dashboard (Fase 6 — agregador). MODO MOCK: deriva os blocos Financeiro e NCT
@@ -64,6 +64,7 @@ export default function DashboardPage() {
       commercial={MOCK_COMMERCIAL}
       implementation={MOCK_IMPLEMENTATION}
       nct={{ atRisk, avgProgress, activeNarratives: activeNarrativeIds.size, staleCommitmentsCount }}
+      growth={MOCK_GROWTH_DATA}
     />
   )
 }
