@@ -2,15 +2,8 @@
 
 import { useRouter } from 'next/navigation'
 import { Inbox } from 'lucide-react'
-import { EntityBadge } from '@/components/ui/entity-badge'
-import {
-  CONTRACT_KIND_LABELS,
-  CONTRACT_STATUS_LABELS,
-  TONE,
-  formatCurrency,
-  formatDate,
-  isOverdue,
-} from '@/lib/format'
+import { CONTRACT_KIND_LABELS, formatCurrency, formatDate, isOverdue } from '@/lib/format'
+import { ContractStatusMenu } from '@/components/projects/contract-status-menu'
 import { EntityActionsMenu } from '@/components/entity-actions-menu'
 import { archiveContract, unarchiveContract, deleteContract } from '@/lib/actions/contracts'
 import type { MaintenanceItem } from '@/lib/queries/projects-board'
@@ -78,10 +71,8 @@ export function MaintenanceList({
                   {c.nextContactDate ? formatDate(c.nextContactDate) : '—'}
                   {overdue && ' · atrasado'}
                 </td>
-                <td className="px-3 py-2">
-                  <EntityBadge
-                    meta={{ label: CONTRACT_STATUS_LABELS[c.status], className: TONE.green }}
-                  />
+                <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                  <ContractStatusMenu contractId={c.id} status={c.status} />
                 </td>
                 <td className="px-3 py-2 text-right" onClick={(e) => e.stopPropagation()}>
                   <EntityActionsMenu

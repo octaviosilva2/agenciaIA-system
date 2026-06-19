@@ -1,43 +1,61 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { toast } from 'sonner'
-import { ArrowLeft, CheckCircle2, Plus, Trash2, Wrench } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { EntityBadge } from '@/components/ui/entity-badge'
-import { TasksKanban, type TaskItem } from '@/components/tasks/tasks-kanban'
 import {
-  PROJECT_STATUS,
-  deliveryCountdown,
-  formatDate,
-  isOverdue,
-} from '@/lib/format'
+  AlertTriangle,
+  ArrowLeft,
+  CheckCircle2,
+  ChevronRight,
+  Circle,
+  CircleDot,
+  Plus,
+  Trash2,
+} from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { TasksKanban, type TaskItem } from '@/components/tasks/tasks-kanban'
+import { updateScopeItems, updateProjectStatus, updateProjectProgress } from '@/lib/actions/project'
+import { PROJECT_STATUS, deliveryCountdown, formatDate, isOverdue } from '@/lib/format'
+import { cn } from '@/lib/utils'
+import type { ScopeItem, ScopeStatus } from '@/lib/queries/opportunity-detail'
 import type { Database } from '@/lib/supabase/types'
 
 type ProjectStatus = Database['public']['Enums']['project_status']
-type Stage = { id: string; name: string; done: boolean }
-type ScopeItem = { id: string; title: string; contracted: boolean; delivered: boolean }
-type PhaseEvent = { status: ProjectStatus; enteredAt: string }
 
-/** Dados da tela operacional do projeto (mock no mini-gate; query real depois). */
-export type ImplementationDetailData = {
-  projectId: string
-  dealId: string
-  project: string
-  company: string
-  companyId: string
-  status: ProjectStatus
-  dueDate: string | null
-  customStages: Stage[]
-  scopeItems: ScopeItem[]
-  tasks: TaskItem[]
-  phaseEvents: PhaseEvent[]
-  hasContract: boolean
+/** Fases do projeto em ordem linear para o stepper. */
+const PHASE_ORDER: ProjectStatus[] = [
+  'a_iniciar',
+  'briefing',
+  'desenvolvimento',
+  'revisao',
+  'entregue',
+]
+
+function nextScopeStatus(s: ScopeStatus): ScopeStatus {
+  if (s === 'pendente') return 'em_andamento'
+  if (s === 'em_andamento') return 'entregue'
+  return 'pendente'
+}
+
+const SCOPE_LABEL: Record<ScopeStatus, string> = {
+  pendente: 'Pendente',
+  em_andamento: 'Em andamento',
+  entregue: 'Entregue',
 }
 
 const inputCls =
   'h-9 w-full rounded-md border border-border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-ring'
+
+const textareaCls =
+  'w-full rounded-md border border-border bg-card px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring resize-none'
 
 function SectionCard({
   title,
@@ -59,35 +77,133 @@ function SectionCard({
   )
 }
 
-function ProgressBar({ done, total }: { done: number; total: number }) {
-  const pct = total > 0 ? Math.round((done / total) * 100) : 0
+function ScopeStatusIcon({ status, onClick }: { status: ScopeStatus; onClick: () => void }) {
+  if (status === 'entregue') {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        aria-label="Desfazer entrega"
+        className="cursor-pointer text-green-600 transition-opacity hover:opacity-70 dark:text-green-400"
+      >
+        <CheckCircle2 className="h-5 w-5" />
+      </button>
+    )
+  }
+  if (status === 'em_andamento') {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        aria-label="Marcar como entregue"
+        className="cursor-pointer text-blue-600 transition-opacity hover:opacity-70 dark:text-blue-400"
+      >
+        <CircleDot className="h-5 w-5" />
+      </button>
+    )
+  }
   return (
-    <div className="flex items-center gap-3">
-      <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
-        <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${pct}%` }} />
-      </div>
-      <span className="font-mono text-xs tabular-nums text-muted-foreground">{done}/{total}</span>
-    </div>
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label="Iniciar item"
+      className="cursor-pointer text-muted-foreground transition-colors hover:text-foreground"
+    >
+      <Circle className="h-5 w-5" />
+    </button>
   )
 }
 
-export function ImplementationDetail({ data }: { data: ImplementationDetailData }) {
-  // Estado local (mock): vira persistência via server actions após o mini-gate.
-  const [status, setStatus] = useState<ProjectStatus>(data.status)
-  const [stages, setStages] = useState<Stage[]>(data.customStages)
-  const [scope, setScope] = useState<ScopeItem[]>(data.scopeItems)
-  const [newStage, setNewStage] = useState('')
-  const [newScope, setNewScope] = useState('')
+export function ImplementationDetail({
+  projectId,
+  dealId,
+  initialScopeItems,
+  initialStatus = 'desenvolvimento',
+  initialProgress = 0,
+  tasks,
+  project,
+  company,
+  companyId,
+  dueDate = null,
+}: {
+  projectId: string
+  dealId: string
+  initialScopeItems: ScopeItem[]
+  initialStatus?: ProjectStatus
+  initialProgress?: number
+  tasks: TaskItem[]
+  project?: string
+  company?: string
+  companyId?: string
+  dueDate?: string | null
+}) {
+  const router = useRouter()
+  const [phaseStatus, setPhaseStatus] = useState<ProjectStatus>(initialStatus)
+  const [scope, setScope] = useState<ScopeItem[]>(initialScopeItems)
+  const [progress, setProgress] = useState<number>(initialProgress)
+  const [newTitle, setNewTitle] = useState('')
+  const [newDesc, setNewDesc] = useState('')
+  const [savingScope, setSavingScope] = useState(false)
+  const [descDialog, setDescDialog] = useState<ScopeItem | null>(null)
 
-  const delivered = status === 'entregue'
-  const doneTasks = data.tasks.filter((t) => t.status === 'done').length
-  const doneStages = stages.filter((s) => s.done).length
-  const overdue = !delivered && isOverdue(data.dueDate)
+  const blockedTasks = tasks.filter((t) => t.status === 'impedimento').length
+  const overdue = phaseStatus !== 'entregue' && isOverdue(dueDate)
+  const currentPhaseIdx = PHASE_ORDER.indexOf(phaseStatus)
 
-  function toggleDelivered() {
-    const next: ProjectStatus = delivered ? 'desenvolvimento' : 'entregue'
-    setStatus(next)
-    toast.success(next === 'entregue' ? 'Projeto marcado como entregue.' : 'Projeto reaberto.')
+  /** Persiste o escopo atual no banco e atualiza as telas. */
+  async function persistScope(nextItems: ScopeItem[]) {
+    setSavingScope(true)
+    const res = await updateScopeItems(projectId, dealId, nextItems)
+    setSavingScope(false)
+    if (res.success) {
+      router.refresh()
+    } else {
+      toast.error(res.message)
+    }
+  }
+
+  function advanceScopeStatus(id: string) {
+    const next = scope.map((x) => (x.id === id ? { ...x, status: nextScopeStatus(x.status) } : x))
+    setScope(next)
+    void persistScope(next)
+  }
+
+  function removeScopeItem(id: string) {
+    const next = scope.filter((x) => x.id !== id)
+    setScope(next)
+    void persistScope(next)
+  }
+
+  function addScopeItem() {
+    const t = newTitle.trim()
+    if (!t) return
+    const next = [
+      ...scope,
+      { id: crypto.randomUUID(), title: t, description: newDesc.trim(), status: 'pendente' as ScopeStatus },
+    ]
+    setScope(next)
+    setNewTitle('')
+    setNewDesc('')
+    void persistScope(next)
+  }
+
+  /** Muda fase — atualiza local e persiste no banco (sincroniza com o kanban). */
+  async function changePhase(next: ProjectStatus) {
+    if (next === phaseStatus) return
+    setPhaseStatus(next)
+    const res = await updateProjectStatus(projectId, dealId, next)
+    if (!res.success) {
+      toast.error(res.message)
+      setPhaseStatus(phaseStatus) // reverte se falhou
+    } else {
+      router.refresh()
+    }
+  }
+
+  /** Persiste o progresso (%) ao soltar o slider. */
+  async function commitProgress(value: number) {
+    const res = await updateProjectProgress(projectId, dealId, value)
+    if (!res.success) toast.error(res.message)
   }
 
   return (
@@ -101,242 +217,217 @@ export function ImplementationDetail({ data }: { data: ImplementationDetailData 
       </Link>
 
       {/* Header */}
-      <header className="rounded-lg border border-border bg-card p-4">
+      <header className="space-y-4 rounded-lg border border-border bg-card p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <h2 className="text-lg font-semibold tracking-tight">{data.project}</h2>
-              <EntityBadge meta={PROJECT_STATUS[status]} />
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Cliente:{' '}
-              <Link href={`/contatos/${data.companyId}`} className="font-medium hover:underline">
-                {data.company}
-              </Link>
-              {data.dueDate && (
-                <>
-                  {' · '}
-                  <span className={overdue ? 'font-medium text-red-600 dark:text-red-400' : ''}>
-                    Entrega {formatDate(data.dueDate)}
-                    {!delivered && ` · ${deliveryCountdown(data.dueDate)}`}
-                  </span>
-                </>
-              )}
-            </p>
+          <div className="space-y-0.5">
+            {project && <h2 className="text-lg font-semibold tracking-tight">{project}</h2>}
+            {company && companyId && (
+              <p className="text-sm text-muted-foreground">
+                <Link href={`/contatos/${companyId}`} className="font-medium hover:underline">
+                  {company}
+                </Link>
+                {dueDate && (
+                  <>
+                    {' · '}
+                    <span className={overdue ? 'font-medium text-red-600 dark:text-red-400' : ''}>
+                      Entrega {formatDate(dueDate)}
+                      {phaseStatus !== 'entregue' && ` · ${deliveryCountdown(dueDate)}`}
+                    </span>
+                  </>
+                )}
+              </p>
+            )}
           </div>
-          <Button type="button" variant={delivered ? 'outline' : 'default'} onClick={toggleDelivered}>
-            <CheckCircle2 className="h-4 w-4" />
-            {delivered ? 'Reabrir projeto' : 'Marcar como entregue'}
-          </Button>
+
+          {blockedTasks > 0 && (
+            <span className="inline-flex items-center gap-1.5 rounded-md bg-red-100 px-2.5 py-1 text-sm font-medium text-red-700 dark:bg-red-500/15 dark:text-red-400">
+              <AlertTriangle className="h-4 w-4" />
+              {blockedTasks} impedimento{blockedTasks > 1 ? 's' : ''}
+            </span>
+          )}
         </div>
 
-        {/* Progresso por tarefas */}
-        <div className="mt-3 border-t border-border pt-3">
-          <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            Tarefas concluídas
-          </p>
-          <ProgressBar done={doneTasks} total={data.tasks.length} />
+        {/* Stepper + botão "Mover de fase" */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-1">
+            {PHASE_ORDER.map((phase, idx) => {
+              const isPast = idx < currentPhaseIdx
+              const isCurrent = idx === currentPhaseIdx
+              return (
+                <div key={phase} className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => void changePhase(phase)}
+                    className={cn(
+                      'cursor-pointer rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                      isCurrent
+                        ? 'bg-primary text-primary-foreground'
+                        : isPast
+                          ? 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                          : 'text-muted-foreground/40 hover:bg-accent hover:text-foreground',
+                    )}
+                  >
+                    {isPast && (
+                      <CheckCircle2 className="mr-1.5 inline h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+                    )}
+                    {PROJECT_STATUS[phase].label}
+                  </button>
+                  {idx < PHASE_ORDER.length - 1 && (
+                    <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/30" />
+                  )}
+                </div>
+              )
+            })}
+          </div>
+
+          {currentPhaseIdx < PHASE_ORDER.length - 1 && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void changePhase(PHASE_ORDER[currentPhaseIdx + 1])}
+            >
+              Mover de fase
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
+
+        {/* Progresso manual — slider definido pelo programador */}
+        <div className="flex items-center gap-4 border-t border-border pt-3">
+          <div className="flex-1 space-y-2">
+            <input
+              type="range"
+              min={0}
+              max={100}
+              step={1}
+              value={progress}
+              onChange={(e) => setProgress(Number(e.target.value))}
+              onMouseUp={(e) => void commitProgress(Number((e.target as HTMLInputElement).value))}
+              onTouchEnd={(e) => void commitProgress(Number((e.target as HTMLInputElement).value))}
+              className="h-2 w-full cursor-pointer accent-primary"
+              aria-label="Progresso do projeto"
+            />
+            <p className="text-xs text-muted-foreground">
+              Progresso{savingScope ? ' · salvando…' : ''}
+            </p>
+          </div>
+          <span className="w-14 text-right font-mono text-3xl font-semibold tabular-nums tracking-tight">
+            {progress}%
+          </span>
         </div>
       </header>
 
-      {/* Tarefas (peça central) */}
+      {/* Kanban de tarefas */}
       <SectionCard title="Tarefas">
-        <TasksKanban tasks={data.tasks} />
+        <TasksKanban tasks={tasks} />
       </SectionCard>
 
-      <div className="grid items-start gap-4 lg:grid-cols-3">
-        {/* Escopo contratado × entregue */}
-        <div className="lg:col-span-2">
-          <SectionCard title="Escopo contratado × entregue">
-            <div className="space-y-3">
-              {scope.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nenhum item de escopo ainda.</p>
-              ) : (
-                <ul className="divide-y divide-border">
-                  <li className="flex items-center gap-2 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                    <span className="flex-1">Item</span>
-                    <span className="w-20 text-center">Contratado</span>
-                    <span className="w-20 text-center">Entregue</span>
-                    <span className="w-8" />
-                  </li>
-                  {scope.map((it) => (
-                    <li key={it.id} className="flex items-center gap-2 py-1.5 text-sm">
-                      <span className="flex-1">{it.title}</span>
-                      <span className="w-20 text-center">
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 cursor-pointer rounded border-border"
-                          checked={it.contracted}
-                          onChange={() =>
-                            setScope((p) =>
-                              p.map((x) => (x.id === it.id ? { ...x, contracted: !x.contracted } : x)),
-                            )
-                          }
-                        />
-                      </span>
-                      <span className="w-20 text-center">
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 cursor-pointer rounded border-border"
-                          checked={it.delivered}
-                          onChange={() =>
-                            setScope((p) =>
-                              p.map((x) => (x.id === it.id ? { ...x, delivered: !x.delivered } : x)),
-                            )
-                          }
-                        />
-                      </span>
-                      <span className="w-8 text-right">
-                        <button
-                          type="button"
-                          onClick={() => setScope((p) => p.filter((x) => x.id !== it.id))}
-                          className="cursor-pointer text-muted-foreground hover:text-red-600"
-                          aria-label="Remover item"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <div className="flex gap-2">
-                <input
-                  value={newScope}
-                  onChange={(e) => setNewScope(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault()
-                      const t = newScope.trim()
-                      if (!t) return
-                      setScope((p) => [...p, { id: crypto.randomUUID(), title: t, contracted: true, delivered: false }])
-                      setNewScope('')
-                    }
-                  }}
-                  placeholder="Novo item de escopo…"
-                  className={inputCls}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    const t = newScope.trim()
-                    if (!t) return
-                    setScope((p) => [...p, { id: crypto.randomUUID(), title: t, contracted: true, delivered: false }])
-                    setNewScope('')
-                  }}
-                >
-                  <Plus className="h-4 w-4" />
-                  Adicionar
-                </Button>
+      {/* Escopo contratado — persiste no banco ao mudar */}
+      <SectionCard title="Escopo contratado">
+        <div className="space-y-1">
+          {/* Dialog de descrição completa */}
+          <Dialog open={!!descDialog} onOpenChange={(v) => !v && setDescDialog(null)}>
+            <DialogContent className="sm:max-w-4xl">
+              <DialogHeader>
+                <DialogTitle>{descDialog?.title}</DialogTitle>
+              </DialogHeader>
+              <div className="mt-2 max-h-[75vh] overflow-y-auto text-sm leading-relaxed text-muted-foreground whitespace-pre-wrap">
+                {descDialog?.description || 'Sem descrição.'}
               </div>
-            </div>
-          </SectionCard>
-        </div>
+            </DialogContent>
+          </Dialog>
 
-        {/* Lateral: etapas, histórico, manutenção */}
-        <div className="space-y-4 lg:col-span-1">
-          <SectionCard
-            title="Etapas internas"
-            action={
-              <span className="font-mono text-xs tabular-nums text-muted-foreground">
-                {doneStages}/{stages.length}
-              </span>
-            }
-          >
-            <div className="space-y-3">
-              {stages.length > 0 && <ProgressBar done={doneStages} total={stages.length} />}
-              <ul className="space-y-1.5">
-                {stages.map((s) => (
-                  <li key={s.id} className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 cursor-pointer rounded border-border"
-                      checked={s.done}
-                      onChange={() =>
-                        setStages((p) => p.map((x) => (x.id === s.id ? { ...x, done: !x.done } : x)))
-                      }
+          {scope.length === 0 ? (
+            <p className="py-2 text-sm text-muted-foreground">Nenhum item de escopo ainda.</p>
+          ) : (
+            <ul className="divide-y divide-border">
+              {scope.map((it) => (
+                <li key={it.id} className="flex items-center gap-3 py-3">
+                  <div className="shrink-0">
+                    <ScopeStatusIcon
+                      status={it.status}
+                      onClick={() => advanceScopeStatus(it.id)}
                     />
-                    <input
-                      value={s.name}
-                      onChange={(e) =>
-                        setStages((p) => p.map((x) => (x.id === s.id ? { ...x, name: e.target.value } : x)))
-                      }
-                      className="h-7 flex-1 rounded-md border border-transparent bg-transparent px-1.5 text-sm outline-none hover:border-border focus:border-border focus:ring-2 focus:ring-ring"
-                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => it.description && setDescDialog(it)}
+                    className={cn(
+                      'min-w-0 flex-1 text-left text-sm font-medium',
+                      it.description ? 'cursor-pointer hover:underline' : 'cursor-default',
+                      it.status === 'entregue' && 'text-muted-foreground line-through',
+                    )}
+                  >
+                    {it.title}
+                  </button>
+                  <span
+                    className={cn(
+                      'shrink-0 text-xs',
+                      it.status === 'entregue'
+                        ? 'text-green-600 dark:text-green-400'
+                        : it.status === 'em_andamento'
+                          ? 'text-blue-600 dark:text-blue-400'
+                          : 'text-muted-foreground',
+                    )}
+                  >
+                    {SCOPE_LABEL[it.status]}
+                  </span>
+                  {it.description && (
                     <button
                       type="button"
-                      onClick={() => setStages((p) => p.filter((x) => x.id !== s.id))}
-                      className="cursor-pointer text-muted-foreground hover:text-red-600"
-                      aria-label="Remover etapa"
+                      onClick={() => setDescDialog(it)}
+                      className="shrink-0 cursor-pointer text-xs text-muted-foreground hover:text-foreground"
                     >
-                      <Trash2 className="h-4 w-4" />
+                      Ver
                     </button>
-                  </li>
-                ))}
-              </ul>
-              <div className="flex gap-2">
-                <input
-                  value={newStage}
-                  onChange={(e) => setNewStage(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault()
-                      const t = newStage.trim()
-                      if (!t) return
-                      setStages((p) => [...p, { id: crypto.randomUUID(), name: t, done: false }])
-                      setNewStage('')
-                    }
-                  }}
-                  placeholder="Nova etapa…"
-                  className={inputCls}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    const t = newStage.trim()
-                    if (!t) return
-                    setStages((p) => [...p, { id: crypto.randomUUID(), name: t, done: false }])
-                    setNewStage('')
-                  }}
-                >
-                  <Plus className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          </SectionCard>
-
-          <SectionCard title="Histórico de fases">
-            {data.phaseEvents.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Sem histórico de fases ainda.</p>
-            ) : (
-              <ol className="space-y-2">
-                {data.phaseEvents.map((ev, idx) => (
-                  <li key={idx} className="flex items-center justify-between gap-2 text-sm">
-                    <EntityBadge meta={PROJECT_STATUS[ev.status]} />
-                    <span className="text-xs text-muted-foreground">{formatDate(ev.enteredAt)}</span>
-                  </li>
-                ))}
-              </ol>
-            )}
-          </SectionCard>
-
-          {data.hasContract && (
-            <SectionCard title="Manutenção">
-              <Link
-                href={`/projetos/${data.dealId}`}
-                className="inline-flex items-center gap-1.5 text-sm font-medium text-foreground hover:underline"
-              >
-                <Wrench className="h-4 w-4 text-muted-foreground" />
-                Ver contrato e tarefas de manutenção
-              </Link>
-            </SectionCard>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => removeScopeItem(it.id)}
+                    className="shrink-0 cursor-pointer text-muted-foreground hover:text-red-600"
+                    aria-label="Remover item"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </li>
+              ))}
+            </ul>
           )}
+
+          <div className="space-y-2 border-t border-border pt-3">
+            <input
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  addScopeItem()
+                }
+              }}
+              placeholder="Título do item…"
+              className={inputCls}
+            />
+            <textarea
+              value={newDesc}
+              onChange={(e) => setNewDesc(e.target.value)}
+              placeholder="Descrição do que abrange esse item…"
+              rows={2}
+              className={textareaCls}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!newTitle.trim()}
+              onClick={addScopeItem}
+            >
+              <Plus className="h-4 w-4" />
+              Adicionar
+            </Button>
+          </div>
         </div>
-      </div>
+      </SectionCard>
     </div>
   )
 }

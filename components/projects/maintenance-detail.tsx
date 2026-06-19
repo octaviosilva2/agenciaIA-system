@@ -3,8 +3,9 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { format } from 'date-fns'
 import { toast } from 'sonner'
-import { ArrowLeft, Pencil } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Circle, Pencil, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { EntityBadge } from '@/components/ui/entity-badge'
 import { TasksKanban, type TaskItem } from '@/components/tasks/tasks-kanban'
@@ -16,32 +17,39 @@ import {
   archiveMaintenanceTask,
   unarchiveMaintenanceTask,
 } from '@/lib/actions/tasks'
-import { updateMaintenanceContract } from '@/lib/actions/project'
+import { updateMaintenanceContract, setAvulsoContract, toggleChargePaid } from '@/lib/actions/project'
 import { EntityActionsMenu } from '@/components/entity-actions-menu'
+import { ContractStatusMenu } from '@/components/projects/contract-status-menu'
+import { ContractManageActions } from '@/components/projects/contract-manage-actions'
+import { AvulsoChargeDialog } from '@/components/projects/avulso-charge-dialog'
 import { archiveContract, unarchiveContract, deleteContract } from '@/lib/actions/contracts'
 import {
+  CHARGE_OVERDUE,
+  CHARGE_STATUS,
   CONTRACT_KIND_LABELS,
-  CONTRACT_STATUS_LABELS,
   TONE,
   formatCurrency,
   formatDate,
   isOverdue,
 } from '@/lib/format'
+import type { ChargeRow } from '@/lib/queries/opportunity-detail'
 import type { Database } from '@/lib/supabase/types'
 
 type ContractKind = Database['public']['Enums']['contract_kind']
 type ContractStatus = Database['public']['Enums']['contract_status']
 
-/** Dados da tela de manutenção por contrato (mock no mini-gate; query real depois). */
+/** Dados da tela de manutenção por contrato. */
 export type MaintenanceDetailData = {
   contractId: string
   dealId: string | null
+  projectId: string | null
   company: string
   companyId: string
   projectName: string | null
   kind: ContractKind
   status: ContractStatus
   monthlyValue: number | null
+  hourlyRate: number | null
   minMonths: number | null
   billingDay: number | null
   startDate: string | null
@@ -50,6 +58,7 @@ export type MaintenanceDetailData = {
   sla: string | null
   notes: string | null
   archived: boolean
+  charges: ChargeRow[]
   tasks: TaskItem[]
 }
 
@@ -91,7 +100,8 @@ function Info({ label, value, overdue = false }: { label: string; value: React.R
 }
 
 export function MaintenanceDetail({ data }: { data: MaintenanceDetailData }) {
-  // Estado local (mock): vira persistência via server action de contrato após o mini-gate.
+  const isAvulso = data.kind === 'avulso'
+
   const [editing, setEditing] = useState(false)
   const [monthlyValue, setMonthlyValue] = useState(data.monthlyValue ?? 0)
   const [minMonths, setMinMonths] = useState(data.minMonths ?? 12)
@@ -101,10 +111,26 @@ export function MaintenanceDetail({ data }: { data: MaintenanceDetailData }) {
   const [contactFrequencyDays, setContactFrequencyDays] = useState(data.contactFrequencyDays ?? 30)
   const [sla, setSla] = useState(data.sla ?? '')
   const [notes, setNotes] = useState(data.notes ?? '')
+  // Avulso: preço/hora editável + dialog de lançar serviço.
+  const [hourlyRate, setHourlyRate] = useState(data.hourlyRate ?? 0)
+  const [chargeOpen, setChargeOpen] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [busyIds, setBusyIds] = useState<string[]>([])
   const router = useRouter()
 
   const contactOverdue = isOverdue(nextContactDate)
+
+  async function handleToggle(chargeId: string, paid: boolean) {
+    setBusyIds((prev) => [...prev, chargeId])
+    const res = await toggleChargePaid(chargeId, paid, [`/manutencao/${data.contractId}`])
+    setBusyIds((prev) => prev.filter((id) => id !== chargeId))
+    if (res.success) {
+      toast.success(res.message)
+      router.refresh()
+    } else {
+      toast.error(res.message)
+    }
+  }
 
   async function save() {
     setBusy(true)
@@ -118,6 +144,26 @@ export function MaintenanceDetail({ data }: { data: MaintenanceDetailData }) {
       sla: sla.trim() || null,
       notes: notes.trim() || null,
     })
+    setBusy(false)
+    if (res.success) {
+      toast.success(res.message)
+      setEditing(false)
+      router.refresh()
+    } else {
+      toast.error(res.message)
+    }
+  }
+
+  async function saveAvulso() {
+    setBusy(true)
+    const res = await setAvulsoContract(
+      data.projectId ?? '',
+      data.dealId ?? '',
+      data.companyId,
+      data.projectName ?? '',
+      data.contractId,
+      { hourlyRate, startDate: startDate || format(new Date(), 'yyyy-MM-dd') },
+    )
     setBusy(false)
     if (res.success) {
       toast.success(res.message)
@@ -147,12 +193,7 @@ export function MaintenanceDetail({ data }: { data: MaintenanceDetailData }) {
               <EntityBadge
                 meta={{ label: CONTRACT_KIND_LABELS[data.kind], className: TONE['slate-soft'] }}
               />
-              <EntityBadge
-                meta={{
-                  label: CONTRACT_STATUS_LABELS[data.status],
-                  className: data.status === 'ativo' ? TONE.green : TONE['zinc-faint'],
-                }}
-              />
+              <ContractStatusMenu contractId={data.contractId} status={data.status} />
               {data.archived && (
                 <EntityBadge meta={{ label: 'Arquivado', className: TONE['zinc-faint'] }} />
               )}
@@ -178,10 +219,10 @@ export function MaintenanceDetail({ data }: { data: MaintenanceDetailData }) {
           </div>
           <div className="flex items-start gap-2">
             <p className="font-mono text-lg font-semibold tabular-nums">
-              {formatCurrency(monthlyValue)}
-              {data.kind === 'mensal' && (
-                <span className="ml-1 text-xs font-normal text-muted-foreground">/mês</span>
-              )}
+              {isAvulso ? formatCurrency(data.hourlyRate) : formatCurrency(monthlyValue)}
+              <span className="ml-1 text-xs font-normal text-muted-foreground">
+                {isAvulso ? '/hora' : '/mês'}
+              </span>
             </p>
             <EntityActionsMenu
               archived={data.archived}
@@ -199,19 +240,124 @@ export function MaintenanceDetail({ data }: { data: MaintenanceDetailData }) {
         </div>
       </header>
 
-      {/* Cobrança — preço e detalhes (editável) */}
+      {/* Cobrança — mensal (parcelas) ou hora avulsa (lançamentos) */}
       <SectionCard
-        title="Cobrança"
+        title={isAvulso ? 'Hora avulsa' : 'Cobrança'}
         action={
-          !editing && (
+          !editing &&
+          (isAvulso ? (
+            <div className="flex gap-2">
+              <Button type="button" size="sm" onClick={() => setChargeOpen(true)}>
+                <Plus className="h-4 w-4" />
+                Lançar serviço
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={() => setEditing(true)}>
+                <Pencil className="h-4 w-4" />
+                Editar
+              </Button>
+            </div>
+          ) : (
             <Button type="button" variant="outline" size="sm" onClick={() => setEditing(true)}>
               <Pencil className="h-4 w-4" />
               Editar cobrança
             </Button>
-          )
+          ))
         }
       >
-        {editing ? (
+        {isAvulso ? (
+          editing ? (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <div>
+                  <label className={labelCls} htmlFor="av_rate">Preço por hora</label>
+                  <input
+                    id="av_rate"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={hourlyRate}
+                    onChange={(e) => setHourlyRate(Number(e.target.value) || 0)}
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className={labelCls} htmlFor="av_start">Início</label>
+                  <input
+                    id="av_start"
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className={inputCls}
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 border-t border-border pt-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => setEditing(false)}
+                >
+                  Cancelar
+                </Button>
+                <Button type="button" size="sm" disabled={busy} onClick={saveAvulso}>
+                  {busy ? 'Salvando…' : 'Salvar'}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <Info label="Preço por hora" value={formatCurrency(data.hourlyRate)} />
+                <Info label="Início" value={startDate ? formatDate(startDate) : '—'} />
+                <Info label="Lançamentos" value={`${data.charges.length}`} />
+              </div>
+              {data.charges.length > 0 ? (
+                <ul className="divide-y divide-border border-t border-border">
+                  {data.charges.map((c) => {
+                    const overdue = c.status === 'pendente' && isOverdue(c.dueDate)
+                    const isBusy = busyIds.includes(c.id)
+                    return (
+                      <li key={c.id} className="flex items-center justify-between gap-2 py-2 text-sm">
+                        <div className="min-w-0">
+                          <p className="truncate font-medium">{c.description}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {c.hours != null ? `${c.hours}h · ` : ''}Vence {formatDate(c.dueDate)}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <span className="font-mono text-sm tabular-nums">
+                            {formatCurrency(c.amount)}
+                          </span>
+                          <EntityBadge meta={overdue ? CHARGE_OVERDUE : CHARGE_STATUS[c.status]} />
+                          {/* Botão de marcar como recebido */}
+                          <button
+                            type="button"
+                            disabled={c.status === 'cancelado' || isBusy}
+                            onClick={() => handleToggle(c.id, c.status !== 'pago')}
+                            title={c.status === 'pago' ? 'Desmarcar recebimento' : 'Marcar como recebido'}
+                            className="text-muted-foreground hover:text-green-600 disabled:opacity-40 dark:hover:text-green-400"
+                          >
+                            {c.status === 'pago' ? (
+                              <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
+                            ) : (
+                              <Circle className="h-4 w-4" />
+                            )}
+                          </button>
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ul>
+              ) : (
+                <p className="border-t border-border pt-3 text-sm text-muted-foreground">
+                  Nenhum serviço lançado. Use “Lançar serviço” para gerar uma cobrança.
+                </p>
+              )}
+            </div>
+          )
+        ) : editing ? (
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               <div>
@@ -341,6 +487,60 @@ export function MaintenanceDetail({ data }: { data: MaintenanceDetailData }) {
             </div>
             {sla && <Info label="SLA" value={sla} />}
             {notes && <Info label="Observações" value={notes} />}
+            {/* Cobranças mensais recorrentes */}
+            {data.charges.length > 0 && (
+              <div className="border-t border-border pt-3">
+                <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Cobranças ({data.charges.length})
+                </p>
+                <ul className="divide-y divide-border">
+                  {data.charges.map((c) => {
+                    const overdue = c.status === 'pendente' && isOverdue(c.dueDate)
+                    const isBusy = busyIds.includes(c.id)
+                    return (
+                      <li key={c.id} className="flex items-center justify-between gap-2 py-2 text-sm">
+                        <div className="min-w-0">
+                          <p className="truncate font-medium">{c.description}</p>
+                          <p className="text-xs text-muted-foreground">Vence {formatDate(c.dueDate)}</p>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <span className="font-mono tabular-nums">{formatCurrency(c.amount)}</span>
+                          <EntityBadge meta={overdue ? CHARGE_OVERDUE : CHARGE_STATUS[c.status]} />
+                          {/* Botão de marcar como recebido */}
+                          <button
+                            type="button"
+                            disabled={c.status === 'cancelado' || isBusy}
+                            onClick={() => handleToggle(c.id, c.status !== 'pago')}
+                            title={c.status === 'pago' ? 'Desmarcar recebimento' : 'Marcar como recebido'}
+                            className="text-muted-foreground hover:text-green-600 disabled:opacity-40 dark:hover:text-green-400"
+                          >
+                            {c.status === 'pago' ? (
+                              <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
+                            ) : (
+                              <Circle className="h-4 w-4" />
+                            )}
+                          </button>
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Ciclo de vida: trocar tipo (Mensal ↔ Hora avulsa) e renovar */}
+        {!editing && (
+          <div className="mt-3 flex flex-wrap gap-2 border-t border-border pt-3">
+            <ContractManageActions
+              contractId={data.contractId}
+              kind={data.kind}
+              monthlyValue={data.monthlyValue}
+              hourlyRate={data.hourlyRate}
+              minMonths={data.minMonths}
+              billingDay={data.billingDay}
+            />
           </div>
         )}
       </SectionCard>
@@ -360,6 +560,16 @@ export function MaintenanceDetail({ data }: { data: MaintenanceDetailData }) {
           }}
         />
       </SectionCard>
+
+      {isAvulso && (
+        <AvulsoChargeDialog
+          open={chargeOpen}
+          onOpenChange={setChargeOpen}
+          contractId={data.contractId}
+          hourlyRate={data.hourlyRate}
+          onDone={() => router.refresh()}
+        />
+      )}
     </div>
   )
 }

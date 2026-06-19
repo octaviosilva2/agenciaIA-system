@@ -23,6 +23,8 @@ export type ContactRow = {
   city: string | null
   status: ContactStatus // estado derivado (lib/rules/contact-status)
   currentStage: DealStage | null // estágio do deal mais recente (ativo OU terminal)
+  currentDealId: string | null // deal mais recente (alvo da troca de estágio pelo badge)
+  hasProject: boolean // o deal mais recente tem projeto vinculado (regras de transição)
   activeProject: string | null
   lastActivityAt: string | null
   // Campos completos para o dialog de edição (kebab).
@@ -94,7 +96,13 @@ export async function getContacts(archived = false): Promise<ContactRow[]> {
     )
 
     // Estágio atual = estágio do deal mais recente (ativo OU terminal).
-    const currentStage = deals[0]?.stage ?? null
+    const currentDeal = deals[0] ?? null
+    const currentStage = currentDeal?.stage ?? null
+
+    // Projeto vinculado ao deal mais recente — necessário às regras de transição.
+    const hasProject = currentDeal
+      ? c.projects.some((p) => p.deal_id === currentDeal.id)
+      : false
 
     // Negócio ativo: o deal mais recente que ainda está no funil.
     const activeDeal = deals.find((d) => ACTIVE_STAGES.includes(d.stage)) ?? null
@@ -120,6 +128,8 @@ export async function getContacts(archived = false): Promise<ContactRow[]> {
       city: c.city,
       status,
       currentStage,
+      currentDealId: currentDeal?.id ?? null,
+      hasProject,
       activeProject,
       lastActivityAt,
       contactName: c.contact_name,

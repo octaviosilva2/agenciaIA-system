@@ -17,7 +17,7 @@ function revalidateProject(dealId: string, projectId: string) {
   revalidatePath(`/implementacao/${projectId}`)
 }
 
-/** Atualiza o checklist de escopo (contratado × entregue) de um projeto. */
+/** Atualiza o escopo de um projeto (persistido em projects.scope_items JSONB). */
 export async function updateScopeItems(
   projectId: string,
   dealId: string,
@@ -30,7 +30,7 @@ export async function updateScopeItems(
     .eq('id', projectId)
   if (error) return { success: false, message: `Erro ao salvar escopo: ${error.message}` }
 
-  revalidatePath(`/projetos/${dealId}`)
+  revalidateProject(dealId, projectId)
   return { success: true, message: 'Escopo atualizado.' }
 }
 
@@ -213,6 +213,445 @@ export async function setMaintenanceContract(
 
   revalidatePath(`/projetos/${dealId}`)
   return { success: true, message: 'Contrato de manutenção salvo.' }
+}
+
+/** Dados para criar/reconfigurar o contrato de manutenção por hora avulsa. */
+export type AvulsoContractInput = {
+  hourlyRate: number
+  startDate: string // 'yyyy-MM-dd'
+}
+
+/**
+ * Cria (ou reconfigura) o contrato de manutenção por HORA AVULSA do projeto.
+ * Diferente do mensal: não tem valor mensal nem recorrências — só o preço/hora.
+ * Os serviços são lançados depois via `addAvulsoCharge` (gera charges 'avulso').
+ */
+export async function setAvulsoContract(
+  projectId: string,
+  dealId: string,
+  companyId: string,
+  projectName: string,
+  contractId: string | null, // presente → reconfigura o contrato existente
+  data: AvulsoContractInput,
+): Promise<ActionState> {
+  if (!(data.hourlyRate > 0)) return { success: false, message: 'Informe o preço por hora.' }
+  if (!data.startDate) return { success: false, message: 'Informe a data de início.' }
+
+  const supabase = await createClient()
+
+  if (contractId) {
+    const { error } = await supabase
+      .from('contracts')
+      .update({ hourly_rate: data.hourlyRate, start_date: data.startDate, kind: 'avulso', status: 'ativo' })
+      .eq('id', contractId)
+    if (error) return { success: false, message: `Erro ao salvar contrato: ${error.message}` }
+  } else {
+    const { error } = await supabase.from('contracts').insert({
+      company_id: companyId,
+      project_id: projectId,
+      name: `Manutenção ${projectName}`,
+      kind: 'avulso',
+      status: 'ativo',
+      hourly_rate: data.hourlyRate,
+      start_date: data.startDate,
+    })
+    if (error) return { success: false, message: `Erro ao criar contrato: ${error.message}` }
+  }
+
+  revalidatePath(`/projetos/${dealId}`)
+  revalidatePath('/manutencao')
+  return { success: true, message: 'Manutenção por hora avulsa salva.' }
+}
+
+/** Lançamento de um serviço no contrato avulso (descrição + horas → cobrança). */
+export type AvulsoChargeInput = {
+  description: string
+  hours: number | null
+  amount: number | null // se informado, sobrepõe horas × preço/hora
+  dueDate: string // 'yyyy-MM-dd'
+  method: string | null
+}
+
+/**
+ * Lança um serviço avulso: calcula `amount = hours × hourly_rate` (ou usa `amount`
+ * direto) e cria uma cobrança `kind='avulso'` vinculada ao contrato. Aparece no
+ * Financeiro e na lista de cobranças do contrato.
+ */
+export async function addAvulsoCharge(
+  contractId: string,
+  data: AvulsoChargeInput,
+): Promise<ActionState> {
+  if (!data.description.trim()) return { success: false, message: 'Descreva o serviço.' }
+  if (!data.dueDate) return { success: false, message: 'Informe o vencimento.' }
+
+  const supabase = await createClient()
+
+  // Contexto do contrato: preço/hora + company/project para a cobrança e revalidação.
+  const { data: ctr, error: cErr } = await supabase
+    .from('contracts')
+    .select('company_id, project_id, hourly_rate, project:projects ( deal_id )')
+    .eq('id', contractId)
+    .single()
+  if (cErr || !ctr) return { success: false, message: `Contrato não encontrado: ${cErr?.message ?? ''}` }
+
+  const ctx = ctr as unknown as {
+    company_id: string
+    project_id: string | null
+    hourly_rate: number | null
+    project: { deal_id: string | null } | { deal_id: string | null }[] | null
+  }
+
+  // Valor: explícito, ou horas × preço/hora.
+  const computed =
+    data.hours != null && ctx.hourly_rate != null ? data.hours * ctx.hourly_rate : null
+  const amount = data.amount ?? computed
+  if (amount == null || !(amount > 0)) {
+    return { success: false, message: 'Informe as horas (com preço/hora) ou um valor.' }
+  }
+
+  const { error } = await supabase.from('charges').insert({
+    company_id: ctx.company_id,
+    project_id: ctx.project_id,
+    contract_id: contractId,
+    description: data.description.trim(),
+    kind: 'avulso',
+    amount,
+    hours: data.hours,
+    due_date: data.dueDate,
+    method: data.method as Database['public']['Enums']['charge_method'] | null,
+    status: 'pendente',
+  })
+  if (error) return { success: false, message: `Erro ao lançar serviço: ${error.message}` }
+
+  revalidatePath(`/manutencao/${contractId}`)
+  revalidatePath('/manutencao')
+  const proj = ctx.project
+  const dealId = Array.isArray(proj) ? proj[0]?.deal_id : proj?.deal_id
+  if (dealId) revalidatePath(`/projetos/${dealId}`)
+  return { success: true, message: 'Serviço lançado.' }
+}
+
+/** Cria um contrato de manutenção a partir de um projeto (tela /manutencao). */
+export type CreateMaintenanceInput =
+  | { kind: 'mensal'; monthlyValue: number; minMonths: number; billingDay: number; startDate: string }
+  | { kind: 'avulso'; hourlyRate: number; startDate: string }
+
+/**
+ * Cria o contrato de manutenção (mensal ou hora avulsa) para um projeto fechado.
+ * Retorna o `contractId` para a UI redirecionar à tela de gestão do contrato.
+ */
+export async function createMaintenanceForProject(
+  projectId: string,
+  input: CreateMaintenanceInput,
+): Promise<ActionState & { contractId?: string }> {
+  const supabase = await createClient()
+
+  const { data: proj, error: pErr } = await supabase
+    .from('projects')
+    .select('id, name, company_id, deal_id')
+    .eq('id', projectId)
+    .single()
+  if (pErr || !proj) return { success: false, message: 'Projeto não encontrado.' }
+  const p = proj as { id: string; name: string; company_id: string; deal_id: string | null }
+
+  function revalidate() {
+    revalidatePath('/manutencao')
+    if (p.deal_id) revalidatePath(`/projetos/${p.deal_id}`)
+  }
+
+  if (input.kind === 'avulso') {
+    if (!(input.hourlyRate > 0)) return { success: false, message: 'Informe o preço por hora.' }
+    const { data: created, error } = await supabase
+      .from('contracts')
+      .insert({
+        company_id: p.company_id,
+        project_id: p.id,
+        name: `Manutenção ${p.name}`,
+        kind: 'avulso',
+        status: 'ativo',
+        hourly_rate: input.hourlyRate,
+        start_date: input.startDate,
+      })
+      .select('id')
+      .single()
+    if (error || !created) {
+      return { success: false, message: `Erro ao criar contrato: ${error?.message ?? ''}` }
+    }
+    revalidate()
+    return { success: true, message: 'Manutenção criada.', contractId: (created as { id: string }).id }
+  }
+
+  // Mensal: cria o contrato e gera as parcelas recorrentes.
+  if (!(input.monthlyValue > 0)) return { success: false, message: 'Informe o valor mensal.' }
+  const { data: created, error } = await supabase
+    .from('contracts')
+    .insert({
+      company_id: p.company_id,
+      project_id: p.id,
+      name: `Manutenção ${p.name}`,
+      kind: 'mensal',
+      status: 'ativo',
+      monthly_value: input.monthlyValue,
+      min_months: input.minMonths,
+      billing_day: input.billingDay,
+      start_date: input.startDate,
+    })
+    .select('id')
+    .single()
+  if (error || !created) {
+    return { success: false, message: `Erro ao criar contrato: ${error?.message ?? ''}` }
+  }
+  const contractId = (created as { id: string }).id
+
+  const generated = generateRecurrences({
+    contractId,
+    startDate: parseISO(input.startDate),
+    minMonths: input.minMonths,
+    billingDay: input.billingDay,
+    monthlyValue: input.monthlyValue,
+  })
+  const rows = generated.map((g) => ({
+    company_id: p.company_id,
+    project_id: p.id,
+    contract_id: g.contract_id,
+    description: g.description,
+    kind: g.kind,
+    amount: g.amount,
+    due_date: g.due_date,
+    status: 'pendente' as const,
+  }))
+  const { error: insErr } = await supabase
+    .from('charges')
+    .upsert(rows, { onConflict: 'contract_id,due_date', ignoreDuplicates: true })
+  if (insErr) return { success: false, message: `Erro ao gerar parcelas: ${insErr.message}` }
+
+  revalidate()
+  return { success: true, message: 'Manutenção criada.', contractId }
+}
+
+type ContractContext = {
+  company_id: string
+  project_id: string | null
+  kind: 'mensal' | 'avulso'
+  project: { deal_id: string | null } | { deal_id: string | null }[] | null
+}
+
+/** Lê o contexto do contrato e devolve o dealId (para revalidar a tela do projeto). */
+async function loadContractContext(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  contractId: string,
+): Promise<{ ctx: ContractContext; dealId: string | null } | null> {
+  const { data, error } = await supabase
+    .from('contracts')
+    .select('company_id, project_id, kind, project:projects ( deal_id )')
+    .eq('id', contractId)
+    .single()
+  if (error || !data) return null
+  const ctx = data as unknown as ContractContext
+  const proj = ctx.project
+  const dealId = Array.isArray(proj) ? (proj[0]?.deal_id ?? null) : (proj?.deal_id ?? null)
+  return { ctx, dealId }
+}
+
+/**
+ * Converte o tipo de um contrato existente (Mensal ↔ Hora avulsa).
+ * Cancela as parcelas mensais PENDENTES (preserva as pagas); nunca apaga lançamentos
+ * avulsos reais. Ao virar mensal, gera as novas recorrências.
+ */
+export async function convertContractKind(
+  contractId: string,
+  input: CreateMaintenanceInput,
+): Promise<ActionState> {
+  const supabase = await createClient()
+  const loaded = await loadContractContext(supabase, contractId)
+  if (!loaded) return { success: false, message: 'Contrato não encontrado.' }
+  const { ctx, dealId } = loaded
+
+  // Cancela as mensalidades pendentes do tipo antigo (não cobra o que não existe mais).
+  const { error: cancErr } = await supabase
+    .from('charges')
+    .update({ status: 'cancelado' })
+    .eq('contract_id', contractId)
+    .eq('kind', 'recorrencia')
+    .eq('status', 'pendente')
+  if (cancErr) return { success: false, message: `Erro ao cancelar parcelas: ${cancErr.message}` }
+
+  function revalidate() {
+    revalidatePath('/manutencao')
+    revalidatePath(`/manutencao/${contractId}`)
+    if (dealId) revalidatePath(`/projetos/${dealId}`)
+  }
+
+  if (input.kind === 'avulso') {
+    if (!(input.hourlyRate > 0)) return { success: false, message: 'Informe o preço por hora.' }
+    const { error } = await supabase
+      .from('contracts')
+      .update({
+        kind: 'avulso',
+        hourly_rate: input.hourlyRate,
+        monthly_value: null,
+        min_months: null,
+        billing_day: null,
+        start_date: input.startDate,
+        status: 'ativo',
+      })
+      .eq('id', contractId)
+    if (error) return { success: false, message: `Erro ao converter: ${error.message}` }
+    revalidate()
+    return { success: true, message: 'Convertido para hora avulsa.' }
+  }
+
+  // → Mensal: zera o preço/hora, define os campos mensais e gera as recorrências.
+  if (!(input.monthlyValue > 0)) return { success: false, message: 'Informe o valor mensal.' }
+  const { error } = await supabase
+    .from('contracts')
+    .update({
+      kind: 'mensal',
+      monthly_value: input.monthlyValue,
+      min_months: input.minMonths,
+      billing_day: input.billingDay,
+      hourly_rate: null,
+      start_date: input.startDate,
+      status: 'ativo',
+    })
+    .eq('id', contractId)
+  if (error) return { success: false, message: `Erro ao converter: ${error.message}` }
+
+  const generated = generateRecurrences({
+    contractId,
+    startDate: parseISO(input.startDate),
+    minMonths: input.minMonths,
+    billingDay: input.billingDay,
+    monthlyValue: input.monthlyValue,
+  })
+  const rows = generated.map((g) => ({
+    company_id: ctx.company_id,
+    project_id: ctx.project_id,
+    contract_id: g.contract_id,
+    description: g.description,
+    kind: g.kind,
+    amount: g.amount,
+    due_date: g.due_date,
+    status: 'pendente' as const,
+  }))
+  const { error: insErr } = await supabase
+    .from('charges')
+    .upsert(rows, { onConflict: 'contract_id,due_date', ignoreDuplicates: true })
+  if (insErr) return { success: false, message: `Erro ao gerar parcelas: ${insErr.message}` }
+
+  revalidate()
+  return { success: true, message: 'Convertido para mensal.' }
+}
+
+/**
+ * Renova um contrato mensal por mais um ciclo: gera as parcelas do novo período a
+ * partir da nova data, SEM apagar as antigas (pagas e pendentes seguem no Financeiro).
+ */
+export async function renewMaintenanceContract(
+  contractId: string,
+  data: MaintenanceContractInput,
+): Promise<ActionState> {
+  if (!(data.monthlyValue > 0)) return { success: false, message: 'Informe o valor mensal.' }
+  if (!Number.isInteger(data.minMonths) || data.minMonths < 1) {
+    return { success: false, message: 'A duração deve ser de ao menos 1 mês.' }
+  }
+  if (!Number.isInteger(data.billingDay) || data.billingDay < 1 || data.billingDay > 28) {
+    return { success: false, message: 'O dia de cobrança deve estar entre 1 e 28.' }
+  }
+  if (!data.startDate) return { success: false, message: 'Informe a data de início.' }
+
+  const supabase = await createClient()
+  const loaded = await loadContractContext(supabase, contractId)
+  if (!loaded) return { success: false, message: 'Contrato não encontrado.' }
+  const { ctx, dealId } = loaded
+  if (ctx.kind !== 'mensal') {
+    return { success: false, message: 'Apenas contratos mensais podem ser renovados.' }
+  }
+
+  const { error } = await supabase
+    .from('contracts')
+    .update({
+      monthly_value: data.monthlyValue,
+      min_months: data.minMonths,
+      billing_day: data.billingDay,
+      start_date: data.startDate,
+      status: 'ativo',
+    })
+    .eq('id', contractId)
+  if (error) return { success: false, message: `Erro ao renovar: ${error.message}` }
+
+  // Gera o novo ciclo sem tocar nas parcelas já existentes (idempotência por due_date).
+  const generated = generateRecurrences({
+    contractId,
+    startDate: parseISO(data.startDate),
+    minMonths: data.minMonths,
+    billingDay: data.billingDay,
+    monthlyValue: data.monthlyValue,
+  })
+  const rows = generated.map((g) => ({
+    company_id: ctx.company_id,
+    project_id: ctx.project_id,
+    contract_id: g.contract_id,
+    description: g.description,
+    kind: g.kind,
+    amount: g.amount,
+    due_date: g.due_date,
+    status: 'pendente' as const,
+  }))
+  const { error: insErr } = await supabase
+    .from('charges')
+    .upsert(rows, { onConflict: 'contract_id,due_date', ignoreDuplicates: true })
+  if (insErr) return { success: false, message: `Erro ao gerar parcelas: ${insErr.message}` }
+
+  revalidatePath('/manutencao')
+  revalidatePath(`/manutencao/${contractId}`)
+  if (dealId) revalidatePath(`/projetos/${dealId}`)
+  return { success: true, message: 'Contrato renovado.' }
+}
+
+/** Marca uma cobrança como recebida ou reverte para pendente. */
+export async function toggleChargePaid(
+  chargeId: string,
+  paid: boolean,
+  extraPaths: string[] = [],
+): Promise<ActionState> {
+  const supabase = await createClient()
+  const { error } = await supabase
+    .from('charges')
+    .update({
+      status: paid ? 'pago' : 'pendente',
+      paid_at: paid ? new Date().toISOString() : null,
+    })
+    .eq('id', chargeId)
+
+  if (error) return { success: false, message: `Erro: ${error.message}` }
+
+  // Revalidar Financeiro + páginas do contexto chamador
+  revalidatePath('/financeiro')
+  revalidatePath('/financeiro/contas')
+  for (const path of extraPaths) revalidatePath(path)
+
+  return {
+    success: true,
+    message: paid ? 'Marcado como recebido.' : 'Marcado como pendente.',
+  }
+}
+
+/** Atualiza o progresso manual (0–100) definido pelo programador. */
+export async function updateProjectProgress(
+  projectId: string,
+  dealId: string,
+  progress: number,
+): Promise<ActionState> {
+  const supabase = await createClient()
+  const { error } = await supabase
+    .from('projects')
+    .update({ progress })
+    .eq('id', projectId)
+  if (error) return { success: false, message: `Erro: ${error.message}` }
+
+  revalidateProject(dealId, projectId)
+  return { success: true, message: 'Progresso atualizado.' }
 }
 
 /** Atualiza o prazo de entrega (due_date) do projeto. */

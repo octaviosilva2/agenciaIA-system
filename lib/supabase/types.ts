@@ -133,6 +133,7 @@ export type Database = {
           created_at: string
           description: string
           due_date: string
+          hours: number | null
           id: string
           kind: Database["public"]["Enums"]["charge_kind"]
           method: Database["public"]["Enums"]["charge_method"] | null
@@ -149,6 +150,7 @@ export type Database = {
           created_at?: string
           description: string
           due_date: string
+          hours?: number | null
           id?: string
           kind: Database["public"]["Enums"]["charge_kind"]
           method?: Database["public"]["Enums"]["charge_method"] | null
@@ -165,6 +167,7 @@ export type Database = {
           created_at?: string
           description?: string
           due_date?: string
+          hours?: number | null
           id?: string
           kind?: Database["public"]["Enums"]["charge_kind"]
           method?: Database["public"]["Enums"]["charge_method"] | null
@@ -354,7 +357,7 @@ export type Database = {
             foreignKeyName: "companies_owner_id_fkey"
             columns: ["owner_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
+            referencedRelation: "companies"
             referencedColumns: ["id"]
           },
         ]
@@ -366,6 +369,7 @@ export type Database = {
           company_id: string
           contact_frequency_days: number | null
           created_at: string
+          hourly_rate: number | null
           id: string
           kind: Database["public"]["Enums"]["contract_kind"]
           min_months: number | null
@@ -385,6 +389,7 @@ export type Database = {
           company_id: string
           contact_frequency_days?: number | null
           created_at?: string
+          hourly_rate?: number | null
           id?: string
           kind: Database["public"]["Enums"]["contract_kind"]
           min_months?: number | null
@@ -404,6 +409,7 @@ export type Database = {
           company_id?: string
           contact_frequency_days?: number | null
           created_at?: string
+          hourly_rate?: number | null
           id?: string
           kind?: Database["public"]["Enums"]["contract_kind"]
           min_months?: number | null
@@ -744,6 +750,7 @@ export type Database = {
           name: string
           notes: string | null
           owner_id: string | null
+          progress: number
           scope_items: Json
           start_date: string | null
           status: Database["public"]["Enums"]["project_status"]
@@ -761,6 +768,7 @@ export type Database = {
           name: string
           notes?: string | null
           owner_id?: string | null
+          progress?: number
           scope_items?: Json
           start_date?: string | null
           status?: Database["public"]["Enums"]["project_status"]
@@ -778,6 +786,7 @@ export type Database = {
           name?: string
           notes?: string | null
           owner_id?: string | null
+          progress?: number
           scope_items?: Json
           start_date?: string | null
           status?: Database["public"]["Enums"]["project_status"]
@@ -1142,14 +1151,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      activity_type: [
-        "nota",
-        "reuniao",
-        "ligacao",
-        "email",
-        "whatsapp",
-        "outro",
-      ],
+      activity_type: ["nota", "reuniao", "ligacao", "email", "whatsapp", "outro"],
       charge_kind: ["setup", "recorrencia", "avulso"],
       charge_method: ["pix", "boleto", "cartao", "transferencia", "outro"],
       charge_status: ["pendente", "pago", "cancelado"],
@@ -1158,44 +1160,14 @@ export const Constants = {
       confidence_level: ["baixa", "media", "alta"],
       contract_kind: ["mensal", "avulso"],
       contract_status: ["ativo", "encerrado"],
-      deal_stage: [
-        "prospect",
-        "lead",
-        "diagnostico",
-        "oportunidade",
-        "escopo",
-        "proposta",
-        "negociacao",
-        "fechado",
-        "perdido",
-        "reativar_futuramente",
-        "desqualificado",
-      ],
+      deal_stage: ["prospect", "lead", "diagnostico", "oportunidade", "escopo", "proposta", "negociacao", "fechado", "perdido", "reativar_futuramente", "desqualificado"],
       deal_urgency: ["baixa", "media", "alta"],
       level_scale: ["baixo", "medio", "alto"],
       narrative_status: ["ativa", "concluida", "arquivada"],
       payable_category: ["infra", "freela", "ferramentas", "imposto", "outro"],
-      project_status: [
-        "a_iniciar",
-        "briefing",
-        "desenvolvimento",
-        "revisao",
-        "entregue",
-      ],
-      strategy_block_kind: [
-        "missao",
-        "proposito",
-        "swot",
-        "asis_tobe",
-        "blueprint",
-      ],
-      task_area: [
-        "gestao",
-        "comercial",
-        "operacional",
-        "financeiro",
-        "sistema",
-      ],
+      project_status: ["a_iniciar", "briefing", "desenvolvimento", "revisao", "entregue"],
+      strategy_block_kind: ["missao", "proposito", "swot", "asis_tobe", "blueprint"],
+      task_area: ["gestao", "comercial", "operacional", "financeiro", "sistema"],
       task_priority: ["urgente", "proximo", "futuro"],
       task_recurrence: ["none", "monthly"],
       task_status: ["analisar", "todo", "doing", "impedimento", "done"],

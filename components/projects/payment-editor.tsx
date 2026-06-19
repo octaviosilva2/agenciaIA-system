@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { addMonths, format, parseISO } from 'date-fns'
 import { toast } from 'sonner'
-import { Plus, Trash2 } from 'lucide-react'
+import { CheckCircle2, Circle, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { EntityBadge } from '@/components/ui/entity-badge'
 import {
@@ -14,7 +14,7 @@ import {
   formatDate,
   isOverdue,
 } from '@/lib/format'
-import { setProjectPayment, type PaymentInstallment } from '@/lib/actions/project'
+import { setProjectPayment, toggleChargePaid, type PaymentInstallment } from '@/lib/actions/project'
 import type { ChargeRow } from '@/lib/queries/opportunity-detail'
 
 const inputCls =
@@ -61,6 +61,7 @@ export function PaymentEditor({
 }) {
   const [editing, setEditing] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [busyToggleIds, setBusyToggleIds] = useState<string[]>([])
   const [mode, setMode] = useState<Mode>('avista')
   const [count, setCount] = useState(2)
   const [firstDate, setFirstDate] = useState(todayISO())
@@ -107,6 +108,17 @@ export function PaymentEditor({
     setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, ...patch } : r)))
   }
 
+  async function handleToggle(chargeId: string, paid: boolean) {
+    setBusyToggleIds((prev) => [...prev, chargeId])
+    const res = await toggleChargePaid(chargeId, paid, [`/projetos/${dealId}`])
+    setBusyToggleIds((prev) => prev.filter((id) => id !== chargeId))
+    if (res.success) {
+      toast.success(res.message)
+    } else {
+      toast.error(res.message)
+    }
+  }
+
   async function save() {
     const installments: PaymentInstallment[] = rows.map((r) => ({
       amount: Number(r.amount) || 0,
@@ -134,6 +146,7 @@ export function PaymentEditor({
           <ul className="divide-y divide-border">
             {charges.map((c, i) => {
               const overdue = c.status === 'pendente' && isOverdue(c.dueDate)
+              const isBusy = busyToggleIds.includes(c.id)
               return (
                 <li key={c.id} className="flex items-center justify-between gap-2 py-2 text-sm">
                   <div className="min-w-0">
@@ -150,6 +163,20 @@ export function PaymentEditor({
                   <div className="flex shrink-0 items-center gap-2">
                     <span className="font-mono text-sm tabular-nums">{formatCurrency(c.amount)}</span>
                     <EntityBadge meta={overdue ? CHARGE_OVERDUE : CHARGE_STATUS[c.status]} />
+                    {/* Botão de marcar como recebido */}
+                    <button
+                      type="button"
+                      disabled={c.status === 'cancelado' || isBusy}
+                      onClick={() => handleToggle(c.id, c.status !== 'pago')}
+                      title={c.status === 'pago' ? 'Desmarcar recebimento' : 'Marcar como recebido'}
+                      className="text-muted-foreground hover:text-green-600 disabled:opacity-40 dark:hover:text-green-400"
+                    >
+                      {c.status === 'pago' ? (
+                        <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
+                      ) : (
+                        <Circle className="h-4 w-4" />
+                      )}
+                    </button>
                   </div>
                 </li>
               )

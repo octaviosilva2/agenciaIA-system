@@ -1,50 +1,60 @@
-# Prompt para a próxima sessão (CRM da Agência) — Fase 3 (Operacional)
+# Prompt para a próxima sessão (CRM da Agência) — BACKEND das Fases 4–6
 
-Você vai **continuar** o CRM interno (Next.js 16 + Tailwind v4 + shadcn/base-ui + Supabase). A **Fase 2 (Comercial) está COMPLETA**. Agora é a **Fase 3 (Operacional)**. **Não comece do zero. Não refaça o que já funciona.**
+Você vai **continuar** o CRM interno (Next.js 16 + Tailwind v4 + shadcn/base-ui + Supabase). As **Fases 2 (Comercial) e 3 (Operacional) estão COMPLETAS** (front + back), mais **arquivar/excluir** transversal. Os **FRONT-ENDS das Fases 4 (Financeiro), 5 (Gestão) e 6 (Dashboard) foram ADIANTADOS** em modo **mock/UI-first** (dados estáticos em `lib/mock/*`, interações em memória + toast — **nada persiste**). Agora a tarefa é **ligar o BACKEND dessas telas, sem mudar o layout aprovado**. **Não comece do zero. Não refaça o front.**
 
 ## Leia primeiro (fonte da verdade, nesta ordem)
-1. `.work/STATUS.md` — estado atual e débito técnico (comece por ele).
-2. `docs/07-handover.md`, `docs/01-produto.md`, `docs/02-dados.md`, `docs/03-telas.md`, `docs/04-arquitetura.md`, `docs/05-roteiro.md`.
-3. `docs/06-design-system.md` + `frontend-teste/style-guide.html` (verdade visual). **Nenhuma UI nasce fora do design system.** Cor/medida/label saem de `lib/format.ts`.
-4. Memória do projeto (auto-carregada): [[projetos-vs-implementacao]], [[cursor-pointer-clicaveis]], [[sem-dri-responsavel]].
+1. `.work/STATUS.md` — em especial a seção **"Front-ends ADIANTADOS — Fases 4, 5 e 6"** (o que existe de UI e onde).
+2. `lib/mock/*` — **o contrato implícito**: os tipos (snake_case, iguais ao schema) que cada tela já consome. O backend deve devolver exatamente esses formatos. Arquivos: `finance.ts`, `config.ts`, `nct.ts`, `tasks.ts`, `profiles.ts`, `strategy.ts`, `dashboard.ts`.
+3. `docs/02-dados.md` (`charges`, `accounts_payable`, `org_settings`, `narratives`, `commitments`, `commitment_checkins`, `strategy_blocks`, `tasks`), `docs/03-telas.md`, `docs/04-arquitetura.md`.
+4. `docs/06-design-system.md` + `frontend-teste/style-guide.html`. **Não altere o visual** — só troque a fonte de dados.
+5. Memória do projeto: [[projetos-vs-implementacao]], [[cursor-pointer-clicaveis]], [[sem-dri-responsavel]], [[supabase-mcp-projeto-crm]].
 
 ## Regras de trabalho (obrigatórias)
-- **UI-first**: monte a UI seguindo o design system, valide com o Octavio em mini-gate, só então ligue o backend. **Pare nos gates.**
-- Padrão de dados: página = Server Component → `lib/queries/*` → componentes client; mutação = Server Action (`lib/actions/*`) com zod → regra (`lib/rules/*`) → Supabase server client → `revalidatePath`. Forms com `useActionState` ou estado local + `router.refresh()`.
-- Todo clicável tem `cursor: pointer`. Toda lista tem empty state. Toda mutação tem toast.
-- Schema só muda via **migration nova versionada** (próxima é `0008`). RLS `authenticated_all` (2 sócios). Após criar tabela/coluna, **regenerar `lib/supabase/types.ts`** (MCP Supabase).
+- **Backend-só, layout congelado.** Substitua `lib/mock/*` por dados reais **sem tocar no layout** das views já construídas. Onde a view recebe props mock, passe os dados da query; onde "muta" em memória, ligue a server action.
+- Padrão de dados: página = Server Component → `lib/queries/*` → componentes client; mutação = Server Action (`lib/actions/*`) com **zod** → regra (`lib/rules/*`) → Supabase server client → `revalidatePath`. Forms com `useActionState` ou estado local + `router.refresh()`.
+- Todo clicável tem `cursor: pointer`. Toda lista tem empty state. Toda mutação tem toast. (Já está assim nos mocks — preserve.)
+- Schema só muda via **migration nova versionada**. **A `0010` já existe (manutenção por hora avulsa, do trabalho avulso); a próxima livre é `0011`.** RLS `authenticated_all` (2 sócios). Após criar tabela/coluna, **regenerar `lib/supabase/types.ts`** pelo MCP **`supabase`** (projeto `czkcfhchsjtmmhtvethg` — confirme com `get_project_url`; o conector `claude.ai Supabase` aponta para OUTRO produto, NÃO use). Ver [[supabase-mcp-projeto-crm]].
 - Código/variáveis em inglês, comentários e UI em PT-BR. Nunca commitar secrets.
 - Ao fim de cada bloco: `npm run build` limpo + `npm test` verde + atualizar `.work/STATUS.md`.
 - **Antes de qualquer ação ambígua, pergunte.** O Octavio decide navegação e regras de produto.
 
 ## Estado em uma frase
-Funil comercial completo + `/funil` (relatórios). Tela do projeto rica (Proposta→Pagamento ao fechar, Escopo, Implementação com prazo/entrega + contador de dias, Manutenção com contrato e parcelas recorrentes linkadas). Operacional (`/implementacao`, `/manutencao`) é recorte read-only; **as telas de detalhe operacional ainda não existem de verdade** — é o foco da Fase 3.
+Comercial + Operacional completos. **Toda a UI restante (Financeiro, Gestão, Dashboard) já existe em mock** e compila (build limpo, 19 rotas). Falta a **camada de dados**: queries + server actions ligando essas telas ao Supabase. As tabelas das Fases 4 e 5 **já existem** no banco.
 
-## Tarefas (seguir a ordem das fases — `docs/05-roteiro.md`)
+### Melhorias recentes na tela de Contas (ainda mock)
+- `/financeiro/contas` abre por padrão em **"Hoje"** (`?periodo=hoje` via redirect no server component).
+- Tabela: valor em **verde (A Receber) / vermelho (A Pagar)** + seta colorida "↑ A receber" / "↓ A pagar" na coluna Descrição quando a aba "Todos" ou "Vencidos" estiver ativa.
+- Nova coluna **Ações** com ícones de editar (lápis) e excluir (lixeira) por linha — EditAccountDialog (`components/finance/edit-account-dialog.tsx`) em mock (estado local).
+- `NewAccountDialog` suporta **Tipo de lançamento**: Único / Parcelado (N×, divide o valor) / Recorrente (semanal/mensal/anual, por X vezes ou sem parar — gera 24 cobranças). Campo **"Lançar como já recebido/pago"** (status=pago, paid_at=now).
+- Callbacks de criação mudaram de singular para plural: `onCreateCharges(Charge[])` / `onCreatePayables(AccountPayable[])`.
+- Todos esses ajustes são **somente front/mock** — ao ligar o backend, as server actions devem respeitar o mesmo contrato de tipos.
 
-### 1. `/implementacao/[id]` — tela operacional do projeto (hoje placeholder)
-Organização por **tarefas** (`tasks`) num **kanban por `task_status`** (`analisar` · `todo` · `doing` · `impedimento` · `done` — labels/cores já em `lib/format.ts` `TASK_STATUS`). Mostrar **% concluído** do projeto (tarefas done / total, ou as `custom_stages`), prazo de entrega (com o `deliveryCountdown` já existente) e as etapas internas (`custom_stages`). O card da lista de Implementação já aponta para `/implementacao/[projectId]`. Marcar o projeto como concluído aqui deve refletir como na tela do projeto (`updateProjectStatus` já existe e grava `project_stage_events`). CRUD de tarefas (criar/editar/mover de coluna/excluir) via Server Actions.
+## Tarefas (ligar backend, na ordem das fases)
 
-### 2. Tela de Manutenção com tarefas (pedido explícito do Octavio)
-"Uma tela só para manutenção onde colocamos as tarefas que vamos fazer — tipo *dar uma olhada*, *entrar em contato*, *pedir ok* — e dá pra ver clicando na manutenção **ou** por dentro do projeto."
-- **Decisões já tomadas:** usar a tabela **`tasks`** (mesma do item 1, com kanban por `task_status`). Tarefas **avulsas, com opção de configurar recorrentes** (começar avulso; recorrência é um a-mais).
-- **Navegação:** tela própria por contrato (sugestão de rota `/manutencao/[contractId]`), acessível pelo **card do board `/manutencao`** e por um **link/atalho no bloco Manutenção da tela do projeto** (`MaintenanceEditor`). Validar a rota com o Octavio no começo.
-- **Migration `0008` (provável):** `tasks` hoje **não** tem `contract_id` nem recorrência. Adicionar `contract_id uuid REFERENCES contracts(id) ON DELETE SET NULL` (tarefa de manutenção = vinculada ao contrato; tarefa de implementação = só `project_id`). Para recorrência configurável, modelar com cuidado (ex.: `recurrence_days int` simples, ou tabela de template) — **propor a modelagem antes de aplicar** (story/spec + gate). `task_area` da manutenção = `operacional`.
-- Reaproveitar o kanban de tarefas do item 1 (mesmo componente), filtrando por `contract_id`.
+### Fase 4 — Financeiro (provavelmente SEM migration; tabelas já existem)
+- `lib/queries/finance.ts`: `getAccounts({ tipo, from, to })` (une `charges` não-canceladas + `accounts_payable`, com rótulo de origem do join `projects.name`/`contracts.name`) e `getFinanceOverview({ from, to })` (agregados dos 6 cards usando `org_settings.tax_rate` + regra `lib/rules/net-revenue`).
+- `lib/actions/finance.ts`: `toggleChargePaid`/`togglePayablePaid` (grava `status`/`paid_at`), `createCharge` (kind `avulso`), `createPayable`, editar/excluir conta **manual** (avulso/payable). Zod já em `lib/validations/finance.ts`.
+- `lib/actions/settings.ts`: `updateOrgSettings` (tax_rate, stale_deal_days), `updateProfile` (nome/ativo).
+- Trocar os mocks em `components/finance/accounts-view.tsx`, `app/(dashboard)/financeiro/page.tsx`, `components/config/*`.
+- **Aceite (GATE):** charge `setup` do fechamento + recorrências do contrato aparecem em Contas com **origem correta + link**; **receita líquida reflete a alíquota** do `/config`; marcar pago/recebido atualiza cards e listas. Cenário: fechar 1 negócio com manutenção e conferir Contas + Visão Geral.
 
-### 3. Revisar os boards `/implementacao` e `/manutencao` (recortes) conforme a Fase 3
-Garantir que os cards levam às telas de detalhe certas e que os dados batem.
+### Fase 5 — Gestão
+- **Strategy:** seed das 5 linhas `strategy_blocks` (se não houver); `lib/queries/strategy.ts` + `lib/actions/strategy.ts` (**só UPDATE** do `content` jsonb por kind).
+- **NCT:** `lib/queries/nct.ts` (lista + detalhe do compromisso); `lib/actions/nct.ts` (CRUD narrativa/compromisso, registrar check-in → **atualiza `progress`/`confidence` do commitment**). Zod em `lib/validations/nct.ts`.
+- **Tarefas (board global):** `lib/queries/tasks.ts` + `lib/actions/tasks.ts` (CRUD + mover status). A view é `components/tasks/tasks-board.tsx` (board próprio, separado do `tasks-kanban` da Implementação/Manutenção). Filtros por projeto/compromisso/área/pessoa/prioridade.
 
-### Depois
-Fases 4 (Financeiro: contas a receber/pagar — as `charges` de pagamento/manutenção já alimentam), 5 (NCT + Estratégia), 6 (Dashboard + Config) — ver `docs/05-roteiro.md`.
+### Fase 6 — Dashboard
+- `lib/queries/dashboard.ts` com um resumo por bloco. Cada bloco = Server Component com **degradação independente** (error boundary próprio). Trocar `lib/mock/dashboard.ts` e as derivações em `app/(dashboard)/page.tsx`.
 
 ## Decisões de produto já tomadas (não reabrir sem motivo)
-- **Sem DRI/responsável** em projeto nem contato — "todos somos responsáveis". Removido de toda a UI; `owner_id` fica no banco sem uso. **Não recriar.** (memória [[sem-dri-responsavel]])
-- A aba **Projetos** mostra o funil comercial completo, **incluindo fechados**. **Implementação é tela separada** (operacional); seu card abre `/implementacao/[projectId]`. (memória [[projetos-vs-implementacao]])
-- Tela do projeto: **Proposta** até fechar; ao fechar vira **Pagamento** (à vista/parcelado → cobranças). **Manutenção**: contrato mensal gera parcelas recorrentes linkadas (`MaintenanceEditor`). Sem Prazos/Negociação ali.
-- **Valor exibido nos boards** = `total_value` (proposta) → `estimated_value` → **soma das cobranças de pagamento**. Não inventar outra fonte de valor.
-- **Prazo de entrega** mostra contador de dias (`deliveryCountdown`).
-- Filtros de estágio: Contatos = pré-venda; Projetos = funil comercial.
+- **Sem DRI/responsável** em projeto nem contato (memória [[sem-dri-responsavel]]) — mas **tarefas e compromissos NCT têm responsável** (assignee/DRI), já refletido nos mocks.
+- **Valor exibido nos boards** = `total_value` → `estimated_value` → soma das cobranças de pagamento.
+- **Arquivar/Excluir** tem padrão pronto: `components/entity-actions-menu.tsx`. Soft delete `archived_at` existe em companies/deals/contracts/tasks — **não** em `charges`/`accounts_payable`. Para contas, "excluir manual" = DELETE; cancelar = status `cancelado` (já no enum). Confirmar com o Octavio se quiser soft delete.
+- **`/implementacao/[id]` é mock (front)** — backend a cargo do sócio dev; **não mexer** sem pedido.
+- **Front-ends das Fases 4–6 são MOCK aprovável** — o layout não muda ao ligar o backend; respeite o contrato dos tipos em `lib/mock/*`.
 
 ## Banco
-Projeto Supabase aplicado (use o MCP). Migrations 0001–0007 aplicadas; a próxima é **0008**. Dados de teste criados pela UI ("Moda em Foco (TESTE)", "Sistema Comercial IA" etc.). Crie/edite pela UI para popular os boards.
+Projeto Supabase **`czkcfhchsjtmmhtvethg`** (MCP `supabase`). Migrations **0001–0010 presentes** (0010 = manutenção por hora avulsa, do trabalho avulso, **não commitada**); a próxima livre é **0011**. As Fases 4 e 5 **não devem precisar de migration** (tabelas já existem) — confirme em `02-dados.md`. Após qualquer mudança de schema, regenerar `lib/supabase/types.ts`.
+
+## Git
+Repositório no GitHub: `octaviosilva2/agenciaIA-system` (público), branch `main`. **Commit/push só quando o Octavio pedir.** O trabalho atual (fronts mock das Fases 4–6 + avulso pré-existente) está **todo no working tree, NÃO commitado** — para revisão.

@@ -4,21 +4,22 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { format, parseISO } from 'date-fns'
 import { toast } from 'sonner'
-import { AlertCircle, ChevronRight, ListChecks } from 'lucide-react'
+import { AlertCircle, ChevronRight, ListChecks, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { EntityBadge } from '@/components/ui/entity-badge'
 import {
   CHARGE_OVERDUE,
   CHARGE_STATUS,
   CONTRACT_KIND_LABELS,
-  CONTRACT_STATUS_LABELS,
-  TONE,
   formatCurrency,
   formatDate,
   isOverdue,
 } from '@/lib/format'
-import { setMaintenanceContract } from '@/lib/actions/project'
+import { setMaintenanceContract, setAvulsoContract } from '@/lib/actions/project'
 import { generateRecurrences } from '@/lib/rules/recurrence'
+import { AvulsoChargeDialog } from '@/components/projects/avulso-charge-dialog'
+import { ContractStatusMenu } from '@/components/projects/contract-status-menu'
+import { ContractManageActions } from '@/components/projects/contract-manage-actions'
 import type { ChargeRow, MaintenanceContract } from '@/lib/queries/opportunity-detail'
 
 const inputCls =
@@ -39,9 +40,9 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 /**
- * Bloco de Manutenção (negócio fechado): cria/reconfigura o contrato mensal e
- * gera as parcelas recorrentes (charges kind 'recorrencia'). Espelha o PaymentEditor.
- * Read: contrato → resumo + parcelas + detalhes; sem contrato → aviso conforme desfecho.
+ * Bloco de Manutenção (negócio fechado). Suporta dois tipos:
+ * - Mensal: cria o contrato mensal e gera as parcelas recorrentes (charges 'recorrencia').
+ * - Hora avulsa: define o preço/hora; os serviços são lançados sob demanda (charges 'avulso').
  */
 export function MaintenanceEditor({
   projectId,
@@ -60,17 +61,23 @@ export function MaintenanceEditor({
   charges: ChargeRow[]
   hasMaintenance: boolean | null
 }) {
+  // Form mensal
   const [editing, setEditing] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [open, setOpen] = useState(false)
   const [monthlyValue, setMonthlyValue] = useState('')
   const [minMonths, setMinMonths] = useState(12)
   const [billingDay, setBillingDay] = useState(10)
   const [startDate, setStartDate] = useState(todayISO())
+  // Form avulso
+  const [editingAvulso, setEditingAvulso] = useState(false)
+  const [hourlyRate, setHourlyRate] = useState('')
+  const [chargeOpen, setChargeOpen] = useState(false)
+  const [open, setOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
+
+  const isAvulso = contract?.kind === 'avulso'
 
   function startEditing() {
     if (contract) {
-      // Reconfigurar a partir do contrato existente.
       setMonthlyValue(contract.monthlyValue != null ? contract.monthlyValue.toFixed(2) : '')
       setMinMonths(contract.minMonths ?? 12)
       setBillingDay(contract.billingDay ?? 10)
@@ -84,7 +91,12 @@ export function MaintenanceEditor({
     setEditing(true)
   }
 
-  // Prévia das parcelas geradas (mesma regra pura do backend).
+  function startEditingAvulso() {
+    setHourlyRate(contract?.hourlyRate != null ? contract.hourlyRate.toFixed(2) : '')
+    setEditingAvulso(true)
+  }
+
+  // Prévia das parcelas mensais (mesma regra pura do backend).
   const value = Number(monthlyValue) || 0
   const preview =
     value > 0 && startDate
@@ -117,7 +129,26 @@ export function MaintenanceEditor({
     }
   }
 
-  // --- Modo edição ---
+  async function saveAvulso() {
+    setBusy(true)
+    const res = await setAvulsoContract(
+      projectId,
+      dealId,
+      companyId,
+      projectName,
+      contract?.id ?? null,
+      { hourlyRate: Number(hourlyRate) || 0, startDate: contract?.startDate ?? todayISO() },
+    )
+    setBusy(false)
+    if (res.success) {
+      toast.success(res.message)
+      setEditingAvulso(false)
+    } else {
+      toast.error(res.message)
+    }
+  }
+
+  // --- Form mensal ---
   if (editing) {
     return (
       <div className="space-y-3">
@@ -171,7 +202,6 @@ export function MaintenanceEditor({
           </div>
         </div>
 
-        {/* Prévia das parcelas recorrentes geradas */}
         {preview.length > 0 ? (
           <ul className="max-h-48 space-y-1 overflow-y-auto border-t border-border pt-3">
             {preview.map((p, i) => (
@@ -217,12 +247,49 @@ export function MaintenanceEditor({
     )
   }
 
-  // --- Modo leitura: sem contrato ---
+  // --- Form avulso (preço/hora) ---
+  if (editingAvulso) {
+    return (
+      <div className="space-y-3">
+        <div>
+          <label className={labelCls} htmlFor="mnt_rate">Preço por hora</label>
+          <input
+            id="mnt_rate"
+            type="number"
+            min="0"
+            step="0.01"
+            value={hourlyRate}
+            onChange={(e) => setHourlyRate(e.target.value)}
+            placeholder="0,00"
+            className={`${inputCls} w-32`}
+          />
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Sem mensalidade — você lança cada serviço (horas × preço) quando atender o cliente.
+        </p>
+        <div className="flex justify-end gap-2 border-t border-border pt-3">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={busy}
+            onClick={() => setEditingAvulso(false)}
+          >
+            Cancelar
+          </Button>
+          <Button type="button" size="sm" disabled={busy} onClick={saveAvulso}>
+            {busy ? 'Salvando…' : 'Salvar'}
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  // --- Leitura: sem contrato ---
   if (!contract) {
-    // Fechado COM manutenção mas contrato ainda não criado.
-    if (hasMaintenance) {
-      return (
-        <div className="space-y-3">
+    return (
+      <div className="space-y-3">
+        {hasMaintenance && (
           <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-500/30 dark:bg-amber-500/10">
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
             <p>
@@ -230,34 +297,106 @@ export function MaintenanceEditor({
               ainda não foi criado.
             </p>
           </div>
+        )}
+        <p className="text-sm text-muted-foreground">
+          {hasMaintenance ? 'Escolha o tipo de manutenção:' : 'Fechado sem manutenção mensal.'}
+        </p>
+        <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" size="sm" onClick={startEditing}>
-            Configurar manutenção
+            Manutenção mensal
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={startEditingAvulso}>
+            Hora avulsa
           </Button>
         </div>
-      )
-    }
-    return <p className="text-sm text-muted-foreground">Fechado sem manutenção.</p>
+      </div>
+    )
   }
 
-  // --- Modo leitura: contrato existente ---
+  // --- Leitura: contrato avulso ---
+  if (isAvulso) {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <p className="font-mono text-base font-semibold tabular-nums">
+              {contract.hourlyRate != null ? formatCurrency(contract.hourlyRate) : '—'}
+              <span className="ml-1 text-xs font-normal text-muted-foreground">/hora</span>
+            </p>
+            <p className="text-xs text-muted-foreground">{CONTRACT_KIND_LABELS[contract.kind]}</p>
+          </div>
+          <ContractStatusMenu contractId={contract.id} status={contract.status} />
+        </div>
+
+        {/* Serviços lançados (charges 'avulso' do contrato) */}
+        {charges.length > 0 ? (
+          <ul className="divide-y divide-border">
+            {charges.map((c) => {
+              const overdue = c.status === 'pendente' && isOverdue(c.dueDate)
+              return (
+                <li key={c.id} className="flex items-center justify-between gap-2 py-2 text-sm">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{c.description}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {c.hours != null ? `${c.hours}h · ` : ''}Vence {formatDate(c.dueDate)}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <span className="font-mono text-sm tabular-nums">{formatCurrency(c.amount)}</span>
+                    <EntityBadge meta={overdue ? CHARGE_OVERDUE : CHARGE_STATUS[c.status]} />
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        ) : (
+          <p className="text-sm text-muted-foreground">Nenhum serviço lançado ainda.</p>
+        )}
+
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" size="sm" onClick={() => setChargeOpen(true)}>
+            <Plus className="h-4 w-4" />
+            Lançar serviço
+          </Button>
+          <Button variant="outline" size="sm" render={<Link href={`/manutencao/${contract.id}`} />}>
+            <ListChecks className="h-4 w-4" />
+            Tarefas de manutenção
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={startEditingAvulso}>
+            Reconfigurar
+          </Button>
+          <ContractManageActions
+            contractId={contract.id}
+            kind={contract.kind}
+            monthlyValue={contract.monthlyValue}
+            hourlyRate={contract.hourlyRate}
+            minMonths={contract.minMonths}
+            billingDay={contract.billingDay}
+          />
+        </div>
+
+        <AvulsoChargeDialog
+          open={chargeOpen}
+          onOpenChange={setChargeOpen}
+          contractId={contract.id}
+          hourlyRate={contract.hourlyRate}
+        />
+      </div>
+    )
+  }
+
+  // --- Leitura: contrato mensal ---
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
         <div>
           <p className="font-mono text-base font-semibold tabular-nums">
             {contract.monthlyValue != null ? formatCurrency(contract.monthlyValue) : '—'}
-            {contract.kind === 'mensal' && (
-              <span className="ml-1 text-xs font-normal text-muted-foreground">/mês</span>
-            )}
+            <span className="ml-1 text-xs font-normal text-muted-foreground">/mês</span>
           </p>
           <p className="text-xs text-muted-foreground">{CONTRACT_KIND_LABELS[contract.kind]}</p>
         </div>
-        <EntityBadge
-          meta={{
-            label: CONTRACT_STATUS_LABELS[contract.status],
-            className: contract.status === 'ativo' ? TONE.green : TONE['zinc-faint'],
-          }}
-        />
+        <ContractStatusMenu contractId={contract.id} status={contract.status} />
       </div>
 
       {/* Parcelas recorrentes geradas */}
@@ -316,6 +455,14 @@ export function MaintenanceEditor({
         <Button type="button" variant="outline" size="sm" onClick={startEditing}>
           Reconfigurar
         </Button>
+        <ContractManageActions
+          contractId={contract.id}
+          kind={contract.kind}
+          monthlyValue={contract.monthlyValue}
+          hourlyRate={contract.hourlyRate}
+          minMonths={contract.minMonths}
+          billingDay={contract.billingDay}
+        />
       </div>
     </div>
   )

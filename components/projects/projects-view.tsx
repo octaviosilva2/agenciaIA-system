@@ -6,14 +6,16 @@ import { Search, List, LayoutGrid, Inbox } from 'lucide-react'
 import { EntityBadge } from '@/components/ui/entity-badge'
 import { PeriodFilter } from '@/components/period-filter'
 import { NewOpportunityDialog } from '@/components/opportunities/new-opportunity-dialog'
+import { NewMaintenanceDialog } from '@/components/projects/new-maintenance-dialog'
 import { OpportunitiesKanban } from '@/components/opportunities/opportunities-kanban'
 import { ImplementationBoard } from '@/components/projects/implementation-board'
 import { MaintenanceList } from '@/components/projects/maintenance-list'
+import { DealStageMenu } from '@/components/deal-stage-menu'
 import { EntityActionsMenu } from '@/components/entity-actions-menu'
 import { archiveProject, unarchiveProject, deleteProject } from '@/lib/actions/deals'
 import { DEAL_STAGE, PROJECT_STATUS, deliveryCountdown, formatCurrency, formatDate, isOverdue } from '@/lib/format'
 import type { OpportunityItem } from '@/components/opportunities/opportunity-card'
-import type { ImplementationItem, MaintenanceItem } from '@/lib/queries/projects-board'
+import type { ImplementationItem, MaintenanceItem, MaintenanceView, ContractProjectOption } from '@/lib/queries/projects-board'
 import type { CompanyOption } from '@/lib/queries/companies'
 import type { DealStage } from '@/lib/rules/deal-stage'
 
@@ -61,18 +63,25 @@ export function ProjectsView({
   implementation = [],
   maintenance = [],
   contacts = [],
-  archived = false,
+  contractProjects = [],
+  archived: archivedProp = false,
+  maintenanceView = 'ativos',
 }: {
   phase: Phase
   sale?: OpportunityItem[]
   implementation?: ImplementationItem[]
   maintenance?: MaintenanceItem[]
   contacts?: CompanyOption[]
+  contractProjects?: ContractProjectOption[]
   archived?: boolean
+  maintenanceView?: MaintenanceView
 }) {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
+
+  // Em Manutenção a visão vem de `maintenanceView`; arquivados é uma de suas opções.
+  const archived = phase === 'manutencao' ? maintenanceView === 'arquivados' : archivedProp
 
   const view = !archived && searchParams.get('view') === 'kanban' ? 'kanban' : 'lista'
   const [search, setSearch] = useState('')
@@ -90,6 +99,14 @@ export function ProjectsView({
     if (next) params.set('arquivados', '1')
     else params.delete('arquivados')
     params.delete('view') // arquivados sempre como lista
+    router.push(`${pathname}?${params.toString()}`)
+  }
+
+  function setMaintenanceView(next: MaintenanceView) {
+    const params = new URLSearchParams(searchParams.toString())
+    if (next === 'ativos') params.delete('vista')
+    else params.set('vista', next)
+    params.delete('view') // manutenção é sempre lista
     router.push(`${pathname}?${params.toString()}`)
   }
 
@@ -122,7 +139,7 @@ export function ProjectsView({
     [maintenance, q],
   )
 
-  const showViewToggle = phase === 'venda' && !archived
+  const showViewToggle = (phase === 'venda' || phase === 'implementacao') && !archived
 
   return (
     <div className="space-y-4">
@@ -132,17 +149,24 @@ export function ProjectsView({
           <h2 className="text-lg font-semibold tracking-tight">
             {archived && phase === 'venda'
               ? 'Projetos arquivados'
-              : archived && phase === 'manutencao'
+              : phase === 'manutencao' && maintenanceView === 'arquivados'
                 ? 'Manutenção arquivada'
-                : PHASE_TITLE[phase]}
+                : phase === 'manutencao' && maintenanceView === 'inativos'
+                  ? 'Manutenção inativa'
+                  : PHASE_TITLE[phase]}
           </h2>
           <p className="text-sm text-muted-foreground">
             {archived && (phase === 'venda' || phase === 'manutencao')
               ? 'Reative ou exclua permanentemente.'
-              : PHASE_SUBTITLE[phase]}
+              : phase === 'manutencao' && maintenanceView === 'inativos'
+                ? 'Contratos marcados como inativos.'
+                : PHASE_SUBTITLE[phase]}
           </p>
         </div>
         {phase === 'venda' && !archived && <NewOpportunityDialog contacts={contacts} />}
+        {phase === 'manutencao' && maintenanceView !== 'arquivados' && (
+          <NewMaintenanceDialog projects={contractProjects} />
+        )}
       </header>
 
       {/* Filtros + alternância de visão */}
@@ -175,13 +199,28 @@ export function ProjectsView({
 
         <PeriodFilter />
 
-        {/* Toggle Ativos / Arquivados (venda e manutenção) */}
-        {(phase === 'venda' || phase === 'manutencao') && (
+        {/* Venda: toggle Ativos / Arquivados (lixeira) */}
+        {phase === 'venda' && (
           <div className="ml-auto inline-flex items-center rounded-md border border-border bg-card p-0.5">
             <button type="button" onClick={() => setArchived(false)} aria-pressed={!archived} className={segCls(!archived)}>
               Ativos
             </button>
             <button type="button" onClick={() => setArchived(true)} aria-pressed={archived} className={segCls(archived)}>
+              Arquivados
+            </button>
+          </div>
+        )}
+
+        {/* Manutenção: status do contrato (Ativos/Inativos) + lixeira (Arquivados) */}
+        {phase === 'manutencao' && (
+          <div className="ml-auto inline-flex items-center rounded-md border border-border bg-card p-0.5">
+            <button type="button" onClick={() => setMaintenanceView('ativos')} aria-pressed={maintenanceView === 'ativos'} className={segCls(maintenanceView === 'ativos')}>
+              Ativos
+            </button>
+            <button type="button" onClick={() => setMaintenanceView('inativos')} aria-pressed={maintenanceView === 'inativos'} className={segCls(maintenanceView === 'inativos')}>
+              Inativos
+            </button>
+            <button type="button" onClick={() => setMaintenanceView('arquivados')} aria-pressed={maintenanceView === 'arquivados'} className={segCls(maintenanceView === 'arquivados')}>
               Arquivados
             </button>
           </div>
@@ -231,8 +270,14 @@ export function ProjectsView({
                   >
                     <td className="px-3 py-2 font-medium">{i.project}</td>
                     <td className="px-3 py-2 text-muted-foreground">{i.company}</td>
-                    <td className="px-3 py-2">
-                      <EntityBadge meta={DEAL_STAGE[i.stage]} />
+                    <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                      <DealStageMenu
+                        context="projeto"
+                        dealId={i.id}
+                        stage={i.stage}
+                        name={i.project}
+                        hasProject
+                      />
                     </td>
                     <td className="px-3 py-2 text-right font-mono tabular-nums">
                       {i.value != null ? formatCurrency(i.value) : '—'}

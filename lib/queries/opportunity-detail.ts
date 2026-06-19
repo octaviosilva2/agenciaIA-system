@@ -18,9 +18,36 @@ export type ChargeRow = {
   dueDate: string
   status: ChargeStatus
   method: ChargeMethod | null
+  hours: number | null // serviços avulsos (manutenção por hora)
+  contractId: string | null // distingue avulso de fechamento (null) de avulso de manutenção
 }
 
-export type ScopeItem = { id: string; title: string; contracted: boolean; delivered: boolean }
+export type ScopeStatus = 'pendente' | 'em_andamento' | 'entregue'
+export type ScopeItem = { id: string; title: string; description: string; status: ScopeStatus }
+
+/** Normaliza item de escopo do banco (suporta formato antigo contracted/delivered). */
+function normalizeScopeItem(raw: unknown): ScopeItem {
+  if (!raw || typeof raw !== 'object') {
+    return { id: '', title: '', description: '', status: 'pendente' }
+  }
+  const r = raw as Record<string, unknown>
+  if (typeof r.status === 'string') {
+    const validStatus = ['pendente', 'em_andamento', 'entregue'].includes(r.status)
+    return {
+      id: String(r.id ?? ''),
+      title: String(r.title ?? ''),
+      description: String(r.description ?? ''),
+      status: validStatus ? (r.status as ScopeStatus) : 'pendente',
+    }
+  }
+  // Formato antigo: contracted/delivered
+  return {
+    id: String(r.id ?? ''),
+    title: String(r.title ?? ''),
+    description: '',
+    status: r.delivered === true ? 'entregue' : 'pendente',
+  }
+}
 
 /** Etapa interna customizável da implementação (jsonb projects.custom_stages). */
 export type CustomStage = { id: string; name: string; done: boolean }
@@ -38,6 +65,7 @@ export type MaintenanceContract = {
   kind: ContractKind
   status: ContractStatus
   monthlyValue: number | null
+  hourlyRate: number | null // preço/hora (contrato avulso)
   minMonths: number | null
   startDate: string
   nextContactDate: string | null
@@ -78,6 +106,7 @@ type RawContract = {
   kind: ContractKind
   status: ContractStatus
   monthly_value: number | null
+  hourly_rate: number | null
   min_months: number | null
   start_date: string
   next_contact_date: string | null
@@ -93,6 +122,8 @@ type RawCharge = {
   due_date: string
   status: ChargeStatus
   method: ChargeMethod | null
+  hours: number | null
+  contract_id: string | null
 }
 
 type RawProject = {
@@ -139,8 +170,8 @@ export async function getOpportunityDetail(dealId: string): Promise<OpportunityD
       projects (
         id, name, total_value, drive_url, notes, scope_items,
         status, start_date, due_date, custom_stages,
-        contracts ( id, kind, status, monthly_value, min_months, start_date, next_contact_date, billing_day, sla ),
-        charges ( id, description, kind, amount, due_date, status, method )
+        contracts ( id, kind, status, monthly_value, hourly_rate, min_months, start_date, next_contact_date, billing_day, sla ),
+        charges ( id, description, kind, amount, due_date, status, method, hours, contract_id )
       ),
       activities ( id, type, content, occurred_at )
     `,
@@ -163,10 +194,18 @@ export async function getOpportunityDetail(dealId: string): Promise<OpportunityD
       dueDate: c.due_date,
       status: c.status,
       method: c.method,
+      hours: c.hours,
+      contractId: c.contract_id,
     }))
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
-  const paymentCharges = allCharges.filter((c) => c.kind === 'setup' || c.kind === 'avulso')
-  const maintenanceCharges = allCharges.filter((c) => c.kind === 'recorrencia')
+  // Pagamento de fechamento: setup, ou avulso SEM contrato (não é manutenção).
+  const paymentCharges = allCharges.filter(
+    (c) => c.kind === 'setup' || (c.kind === 'avulso' && c.contractId == null),
+  )
+  // Manutenção: recorrências (mensal) ou serviços avulsos vinculados a um contrato.
+  const maintenanceCharges = allCharges.filter(
+    (c) => c.kind === 'recorrencia' || (c.kind === 'avulso' && c.contractId != null),
+  )
 
   // Contrato de manutenção: prioriza o ativo; senão, o primeiro existente.
   const rawContract =
@@ -177,6 +216,7 @@ export async function getOpportunityDetail(dealId: string): Promise<OpportunityD
         kind: rawContract.kind,
         status: rawContract.status,
         monthlyValue: rawContract.monthly_value,
+        hourlyRate: rawContract.hourly_rate,
         minMonths: rawContract.min_months,
         startDate: rawContract.start_date,
         nextContactDate: rawContract.next_contact_date,
@@ -199,7 +239,7 @@ export async function getOpportunityDetail(dealId: string): Promise<OpportunityD
     company: company?.name ?? '—',
     driveUrl: project?.drive_url ?? null,
     notes: project?.notes ?? null,
-    scopeItems: project?.scope_items ?? [],
+    scopeItems: (project?.scope_items as unknown[] ?? []).map(normalizeScopeItem),
     startDate: project?.start_date ?? null,
     dueDate: project?.due_date ?? null,
     projectStatus: project?.status ?? null,
@@ -210,5 +250,51 @@ export async function getOpportunityDetail(dealId: string): Promise<OpportunityD
     activities: [...d.activities]
       .sort((a, b) => (b.occurred_at ?? '').localeCompare(a.occurred_at ?? ''))
       .map((a) => ({ id: a.id, type: a.type, content: a.content, occurredAt: a.occurred_at })),
+  }
+}
+
+export type ProjectScope = {
+  dealId: string
+  projectId: string
+  projectName: string
+  company: string
+  companyId: string
+  status: ProjectStatus
+  progress: number
+  dueDate: string | null
+  scopeItems: ScopeItem[]
+}
+
+/**
+ * Busca todos os campos necessários para a tela de implementação pelo projectId.
+ */
+export async function getProjectScope(projectId: string): Promise<ProjectScope | null> {
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('projects')
+    .select(
+      `deal_id, name, status, progress, due_date, scope_items,
+       deals!inner ( companies!inner ( id, name ) )`,
+    )
+    .eq('id', projectId)
+    .single()
+
+  if (error || !data || !data.deal_id) return null
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const deal = (data as any).deals
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const companyRaw = Array.isArray(deal?.companies) ? deal.companies[0] : deal?.companies
+
+  return {
+    dealId: data.deal_id,
+    projectId,
+    projectName: data.name ?? '',
+    company: companyRaw?.name ?? '—',
+    companyId: companyRaw?.id ?? '',
+    status: (data.status ?? 'a_iniciar') as ProjectStatus,
+    progress: (data.progress as number) ?? 0,
+    dueDate: data.due_date ?? null,
+    scopeItems: (data.scope_items as unknown[] ?? []).map(normalizeScopeItem),
   }
 }

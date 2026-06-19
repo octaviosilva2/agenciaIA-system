@@ -3,10 +3,10 @@
 import { useMemo, useState } from 'react'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { Search, List, LayoutGrid, Inbox } from 'lucide-react'
-import { EntityBadge } from '@/components/ui/entity-badge'
 import { PeriodFilter } from '@/components/period-filter'
 import { NewContactDialog } from '@/components/contacts/new-contact-dialog'
 import { ContactsKanban } from '@/components/contacts/contacts-kanban'
+import { DealStageMenu } from '@/components/deal-stage-menu'
 import { EntityActionsMenu } from '@/components/entity-actions-menu'
 import { EditContactDialog, type EditableContact } from '@/components/contacts/edit-contact-dialog'
 import { archiveContact, unarchiveContact, deleteContact } from '@/lib/actions/contacts'
@@ -206,9 +206,15 @@ export function ContactsView({
                       </div>
                     )}
                   </td>
-                  <td className="px-3 py-2">
-                    {c.currentStage ? (
-                      <EntityBadge meta={DEAL_STAGE[c.currentStage]} />
+                  <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                    {c.currentStage && c.currentDealId ? (
+                      <DealStageMenu
+                        context="contato"
+                        dealId={c.currentDealId}
+                        stage={c.currentStage}
+                        name={c.name}
+                        hasProject={c.hasProject}
+                      />
                     ) : (
                       <span className="text-muted-foreground">—</span>
                     )}

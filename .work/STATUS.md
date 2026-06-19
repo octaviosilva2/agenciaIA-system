@@ -1,6 +1,6 @@
 # Status do Projeto
 
-## Fase atual: Fase 2 (Comercial) — COMPLETA. Próximo: Fase 3 (Operacional) — tela `/implementacao/[id]`.
+## Fase atual: Front-ends das Fases 4–6 ADIANTADOS (mock/UI-first). Próximo: BACKEND dessas fases.
 
 Stack: Next.js 16 (App Router, Turbopack) + Tailwind v4 + shadcn/base-ui + Supabase. UI-first com mini-gates. Banco real, limpo (só "Moda em Foco (TESTE)").
 
@@ -33,6 +33,23 @@ Stack: Next.js 16 (App Router, Turbopack) + Tailwind v4 + shadcn/base-ui + Supab
 - **Sem DRI/responsável:** decisão do Octavio — "todos somos responsáveis". Removido de TODA a UI (header do projeto, perfil do contato, colunas/cards dos boards, select de Responsável no cadastro). Colunas `owner_id` seguem no banco (sem migration); query `lib/queries/profiles.ts` removida.
 - **Backend comercial:** `lib/queries/deals.ts` (board), `lib/queries/projects-board.ts` (implementação + manutenção), `lib/queries/opportunity-detail.ts` (tela do projeto, com charges), `lib/queries/contacts.ts`, `lib/queries/contact-profile.ts`, `lib/queries/companies.ts`, `lib/queries/funnel.ts`. Actions: `lib/actions/deals.ts`, `lib/actions/project.ts` (proposta, pagamento, prazo, status, **manutenção**), `lib/actions/contact-profile.ts`. Reflexo entre telas via `revalidatePath('/contatos' + '/projetos' + '/implementacao')`.
 
+### Front-ends ADIANTADOS — Fases 4, 5 e 6 (MOCK / UI-first, SEM backend)
+> Decisão do Octavio (sessão atual): adiantar TODO o front-end das fases restantes em modo UI-first — dados **mock estáticos** (`lib/mock/*`), interações **em memória** (estado local + toast). **Nada persiste.** Layout pronto para aprovação; o backend liga depois SEM mudar o layout. **Build limpo (16 rotas)**, TypeScript verde. **NENHUM arquivo compartilhado pré-existente foi tocado** (`lib/format.ts`, `globals.css`, `app-sidebar`, `ui/*`, `period-filter`, `entity-badge`, `tasks-kanban` da Implementação/Manutenção). Construído via esteira dev-agents (`05-frontend`) + finalização direta.
+
+- **Fase 4 — Financeiro** (`lib/mock/finance.ts`, `lib/mock/config.ts`):
+  - `/financeiro/contas` — `components/finance/accounts-view.tsx` + `new-account-dialog.tsx`: tabela unificada com abas **Todos · A Receber · A Pagar** + `PeriodFilter`; **checkbox de baixa inline** (recebido/pago); **origem com link** (`setup`→`/projetos/[id]`, `recorrencia`→`/manutencao/[id]`, avulso/payable→texto); **atrasadas em vermelho** (`isOverdue`/`CHARGE_OVERDUE`); **"+ Nova conta"** (charge avulso / accounts_payable) validando com `chargeSchema`/`accountPayableSchema` reais.
+  - `/financeiro` Visão Geral — `app/(dashboard)/financeiro/page.tsx` (RSC, mock inline): **6 cards** (bruta · impostos · líquida via `calculateNetRevenue` · a receber · a pagar · saldo) + lista "próximas a vencer" com atrasadas em destaque.
+  - `/config` — `components/config/team-section.tsx` + `settings-section.tsx`: Equipe (toggle ativo, editar nome), **Alíquota (%)**, **`stale_deal_days`**.
+- **Fase 5 — Gestão** (`lib/mock/strategy.ts`, `lib/mock/nct.ts`, `lib/mock/tasks.ts`, `lib/mock/profiles.ts`):
+  - `/estrategia` — `components/strategy/strategy-view.tsx` + `strategy-block-dialog.tsx`: 5 blocos fixos só-edição (**SWOT matriz 2×2**, **AS IS→TO BE** lado a lado, **Blueprint** 4 campos).
+  - `/nct` — `components/nct/nct-view.tsx` (+ `narrative-dialog`, `commitment-dialog`, `nct-bits`): 3 cards de métrica + `PeriodFilter` + narrativas **expansíveis inline** + compromissos (badge `COMMITMENT_TYPE`, **ponto de confiança** `CONFIDENCE_DOT`, % em barra).
+  - `/nct/[commitmentId]` — `components/nct/commitment-detail-view.tsx` (+ `checkin-form`, `linked-task-dialog`): header com **% editável inline**, check-ins (form + histórico reverso), tarefas vinculadas.
+  - `/tarefas` — `components/tasks/tasks-board.tsx` + `task-board-dialog.tsx`: board **PRÓPRIO** (NÃO mexe no `tasks-kanban` congelado), 5 colunas com drag, filtros (projeto/compromisso/área/pessoa/prioridade), card rico (responsável `InitialsAvatar`, vínculos, impacto×esforço).
+- **Fase 6 — Dashboard** (`lib/mock/dashboard.ts`):
+  - `/` — `components/dashboard/dashboard-view.tsx`: 5 blocos (Financeiro · Comercial · Operacional · NCT com link + **Tarefas de hoje** com **concluir inline**). Deriva dos mocks de finance/nct/tasks; agregados de Comercial/Operacional no mock dedicado.
+- **Compartilhado novo:** `components/ui-shared/initials-avatar.tsx` (avatar de iniciais — design system §5.5).
+- **O que falta nessas telas = BACKEND:** queries (`lib/queries/*`) + server actions (`lib/actions/*`) reais, substituindo `lib/mock/*` por dados do Supabase, **sem alterar o layout**. Schemas zod (`lib/validations/finance.ts`, `nct.ts`) e regras puras (`net-revenue`, `recurrence`, `task-recurrence`) já existem. Contrato implícito = nomes de campo snake_case dos tipos em `lib/mock/*`.
+
 ---
 
 ## Pendências / débito técnico
@@ -60,9 +77,13 @@ Stack: Next.js 16 (App Router, Turbopack) + Tailwind v4 + shadcn/base-ui + Supab
 ---
 
 ## Próximos passos (seguir a ordem das fases — `docs/05-roteiro.md`)
-1. ~~Fase 2 (Comercial)~~ ✅ COMPLETA (órfãos, contrato de manutenção, DRI removido, /funil).
-2. **Fase 3 (Operacional):** tela `/implementacao/[id]` ✅ entregue **só no front (mock)** — backend a cargo do sócio dev. Pendente: tela de Manutenção com tarefas (migration 0008) + revisar boards de Implementação/Manutenção.
-3. Fases 4–6 conforme o roteiro (Financeiro, NCT/Estratégia, Dashboard/Config).
+1. ~~Fase 2 (Comercial)~~ ✅ COMPLETA.
+2. ~~Fase 3 (Operacional)~~ ✅ COMPLETA: `/implementacao/[id]` **só front/mock** (backend a cargo do sócio dev); Manutenção com tarefas + cobrança **completa (front+back, migration 0008)**; boards revisados. **+ arquivar/excluir transversal** (migration 0009) em Contatos/Projetos/Manutenção/Tarefas.
+3. ~~Fronts das Fases 4, 5 e 6~~ ✅ ADIANTADOS (mock/UI-first) nesta sessão — ver seção "Front-ends ADIANTADOS" acima.
+4. **PRÓXIMO — Backend das Fases 4–6:** ligar cada tela mock ao Supabase (queries + actions), trocando `lib/mock/*` por dados reais, sem alterar o layout aprovado. Ordem sugerida: **Fase 4 (Financeiro)** primeiro (`charges`/`accounts_payable`/`org_settings` já existem; alíquota via `net-revenue`), depois **Gestão** (narratives/commitments/checkins/strategy_blocks/tasks) e **Dashboard** (resumos por bloco, degradação independente). Cada tela mock tem o contrato implícito documentado nos tipos `lib/mock/*`.
+5. Polimento final + `get_advisors` (security/performance).
 
-Detalhe operacional da continuidade em `docs/PROMPT-PROXIMA-SESSAO.md`.
-Build limpo + 17 testes verdes nesta sessão (órfãos + contrato de manutenção + DRI removido + /funil).
+**Pendência herdada (do sócio dev):** backend de `/implementacao/[id]` (query `getImplementationDetail` + actions de CRUD de tarefas de implementação — o `TasksKanban` já expõe `handlers`).
+
+Detalhe da continuidade em `docs/PROMPT-PROXIMA-SESSAO.md`.
+Última sessão: **front-ends das Fases 4–6 adiantados (mock/UI-first)** — Financeiro, Gestão e Dashboard. Build limpo (16 rotas), TypeScript verde. **NÃO commitado** — todas as mudanças ficam no working tree para revisão do Octavio (inclui também o trabalho avulso pré-existente: manutenção por hora + migration `0010`, próxima migration livre = `0011`).

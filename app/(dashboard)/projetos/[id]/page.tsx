@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, ChevronRight } from 'lucide-react'
 import { getOpportunityDetail } from '@/lib/queries/opportunity-detail'
 import { EntityBadge } from '@/components/ui/entity-badge'
 import { OpportunityActions } from '@/components/opportunities/opportunity-actions'
@@ -42,8 +42,8 @@ export default async function ProjetoDetailPage({
   if (!detail) notFound()
 
   const headerValue = detail.totalValue ?? detail.estimatedValue
-  const stages = detail.customStages ?? []
-  const doneStages = stages.filter((s) => s.done).length
+  const doneScope = detail.scopeItems.filter((s) => s.status === 'entregue').length
+  const totalScope = detail.scopeItems.length
 
   // Escopo é reusado nas duas situações (fechado ou não).
   const scopeBlock = (
@@ -150,17 +150,23 @@ export default async function ProjetoDetailPage({
               }
             >
               <div className="space-y-3">
-                {stages.length > 0 && (
-                  <div className="flex items-center gap-3">
-                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
-                      <div
-                        className="h-full rounded-full bg-primary transition-all"
-                        style={{ width: `${Math.round((doneStages / stages.length) * 100)}%` }}
-                      />
+                {/* Progresso do escopo */}
+                {totalScope > 0 && (
+                  <div>
+                    <div className="flex items-center gap-3">
+                      <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+                        <div
+                          className="h-full rounded-full bg-primary transition-all"
+                          style={{ width: `${Math.round((doneScope / totalScope) * 100)}%` }}
+                        />
+                      </div>
+                      <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                        {doneScope}/{totalScope}
+                      </span>
                     </div>
-                    <span className="font-mono text-xs tabular-nums text-muted-foreground">
-                      {doneStages}/{stages.length}
-                    </span>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Itens de escopo entregues
+                    </p>
                   </div>
                 )}
                 {detail.projectId && detail.projectStatus && (
@@ -171,9 +177,15 @@ export default async function ProjetoDetailPage({
                     dueDate={detail.dueDate}
                   />
                 )}
-                <p className="text-xs text-muted-foreground">
-                  A organização das tarefas e etapas fica na tela de Implementação.
-                </p>
+                {detail.projectId && (
+                  <Link
+                    href={`/implementacao/${detail.projectId}`}
+                    className="inline-flex items-center gap-1.5 text-sm font-medium text-foreground hover:underline"
+                  >
+                    Abrir tela de implementação
+                    <ChevronRight className="h-4 w-4" />
+                  </Link>
+                )}
               </div>
             </SectionCard>
 

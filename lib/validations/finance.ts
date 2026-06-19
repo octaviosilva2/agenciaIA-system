@@ -55,7 +55,7 @@ export type ChargeInput = z.infer<typeof chargeSchema>
 
 export const accountPayableSchema = z.object({
   description: z.string().min(1, "Descrição é obrigatória"),
-  category: z.enum(["infra", "freela", "ferramentas", "imposto", "outro"]),
+  category: z.enum(["fixo", "variavel", "imposto"]),
   amount: z.coerce.number().min(0.01, "Valor inválido"),
   due_date: z.string().min(1, "Data de vencimento é obrigatória"),
   status: z.enum(["pendente", "pago", "cancelado"]).default("pendente"),

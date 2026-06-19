@@ -2,15 +2,98 @@
 
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { Plus, Trash2 } from 'lucide-react'
+import { CheckCircle2, Circle, CircleDot, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { updateScopeItems } from '@/lib/actions/project'
-import type { ScopeItem } from '@/lib/queries/opportunity-detail'
+import { cn } from '@/lib/utils'
+import type { ScopeItem, ScopeStatus } from '@/lib/queries/opportunity-detail'
 
 const inputCls =
   'h-9 w-full rounded-md border border-border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-ring'
 
-/** Editor do checklist de escopo (contratado × entregue) do projeto. */
+const textareaCls =
+  'w-full rounded-md border border-border bg-card px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring resize-none'
+
+const SCOPE_LABEL: Record<ScopeStatus, string> = {
+  pendente: 'Pendente',
+  em_andamento: 'Em andamento',
+  entregue: 'Entregue',
+}
+
+function nextScopeStatus(s: ScopeStatus): ScopeStatus {
+  if (s === 'pendente') return 'em_andamento'
+  if (s === 'em_andamento') return 'entregue'
+  return 'pendente'
+}
+
+function ScopeStatusIcon({ status, onClick }: { status: ScopeStatus; onClick: () => void }) {
+  if (status === 'entregue') {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        aria-label="Desfazer entrega"
+        className="cursor-pointer text-green-600 transition-opacity hover:opacity-70 dark:text-green-400"
+      >
+        <CheckCircle2 className="h-5 w-5" />
+      </button>
+    )
+  }
+  if (status === 'em_andamento') {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        aria-label="Marcar como entregue"
+        className="cursor-pointer text-blue-600 transition-opacity hover:opacity-70 dark:text-blue-400"
+      >
+        <CircleDot className="h-5 w-5" />
+      </button>
+    )
+  }
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label="Iniciar item"
+      className="cursor-pointer text-muted-foreground transition-colors hover:text-foreground"
+    >
+      <Circle className="h-5 w-5" />
+    </button>
+  )
+}
+
+/** Dialog que exibe a descrição completa de um item de escopo. */
+function ScopeDescriptionDialog({
+  item,
+  open,
+  onClose,
+}: {
+  item: ScopeItem | null
+  open: boolean
+  onClose: () => void
+}) {
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="sm:max-w-4xl">
+        <DialogHeader>
+          <DialogTitle>{item?.title}</DialogTitle>
+        </DialogHeader>
+        <div className="mt-2 max-h-[75vh] overflow-y-auto text-sm leading-relaxed text-muted-foreground whitespace-pre-wrap">
+          {item?.description || 'Sem descrição.'}
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/** Editor do escopo contratado do projeto (título + descrição + 3 estados). */
 export function ScopeEditor({
   projectId,
   dealId,
@@ -21,22 +104,28 @@ export function ScopeEditor({
   initialItems: ScopeItem[]
 }) {
   const [items, setItems] = useState<ScopeItem[]>(initialItems)
-  const [title, setTitle] = useState('')
+  const [newTitle, setNewTitle] = useState('')
+  const [newDesc, setNewDesc] = useState('')
   const [busy, setBusy] = useState(false)
+  const [descDialog, setDescDialog] = useState<ScopeItem | null>(null)
 
-  function addItem() {
-    const t = title.trim()
-    if (!t) return
-    setItems((prev) => [...prev, { id: crypto.randomUUID(), title: t, contracted: true, delivered: false }])
-    setTitle('')
-  }
-
-  function toggle(id: string, field: 'contracted' | 'delivered') {
-    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, [field]: !it[field] } : it)))
+  function advance(id: string) {
+    setItems((p) => p.map((x) => (x.id === id ? { ...x, status: nextScopeStatus(x.status) } : x)))
   }
 
   function remove(id: string) {
-    setItems((prev) => prev.filter((it) => it.id !== id))
+    setItems((p) => p.filter((x) => x.id !== id))
+  }
+
+  function addItem() {
+    const t = newTitle.trim()
+    if (!t) return
+    setItems((p) => [
+      ...p,
+      { id: crypto.randomUUID(), title: t, description: newDesc.trim(), status: 'pendente' },
+    ])
+    setNewTitle('')
+    setNewDesc('')
   }
 
   async function save() {
@@ -48,71 +137,101 @@ export function ScopeEditor({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-1">
+      <ScopeDescriptionDialog
+        item={descDialog}
+        open={!!descDialog}
+        onClose={() => setDescDialog(null)}
+      />
+
       {items.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Nenhum item de escopo ainda.</p>
+        <p className="py-2 text-sm text-muted-foreground">Nenhum item de escopo ainda.</p>
       ) : (
         <ul className="divide-y divide-border">
-          <li className="flex items-center gap-2 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            <span className="flex-1">Item</span>
-            <span className="w-20 text-center">Contratado</span>
-            <span className="w-20 text-center">Entregue</span>
-            <span className="w-8" />
-          </li>
           {items.map((it) => (
-            <li key={it.id} className="flex items-center gap-2 py-1.5 text-sm">
-              <span className="flex-1">{it.title}</span>
-              <span className="w-20 text-center">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 rounded border-border"
-                  checked={it.contracted}
-                  onChange={() => toggle(it.id, 'contracted')}
-                />
+            <li key={it.id} className="flex items-center gap-3 py-3">
+              <div className="shrink-0">
+                <ScopeStatusIcon status={it.status} onClick={() => advance(it.id)} />
+              </div>
+              <button
+                type="button"
+                onClick={() => it.description && setDescDialog(it)}
+                className={cn(
+                  'min-w-0 flex-1 text-left text-sm font-medium',
+                  it.description ? 'cursor-pointer hover:underline' : 'cursor-default',
+                  it.status === 'entregue' && 'text-muted-foreground line-through',
+                )}
+              >
+                {it.title}
+              </button>
+              <span
+                className={cn(
+                  'shrink-0 text-xs',
+                  it.status === 'entregue'
+                    ? 'text-green-600 dark:text-green-400'
+                    : it.status === 'em_andamento'
+                      ? 'text-blue-600 dark:text-blue-400'
+                      : 'text-muted-foreground',
+                )}
+              >
+                {SCOPE_LABEL[it.status]}
               </span>
-              <span className="w-20 text-center">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 rounded border-border"
-                  checked={it.delivered}
-                  onChange={() => toggle(it.id, 'delivered')}
-                />
-              </span>
-              <span className="w-8 text-right">
+              {it.description && (
                 <button
                   type="button"
-                  onClick={() => remove(it.id)}
-                  className="text-muted-foreground hover:text-red-600"
-                  aria-label="Remover item"
+                  onClick={() => setDescDialog(it)}
+                  className="shrink-0 cursor-pointer text-xs text-muted-foreground hover:text-foreground"
                 >
-                  <Trash2 className="h-4 w-4" />
+                  Ver
                 </button>
-              </span>
+              )}
+              <button
+                type="button"
+                onClick={() => remove(it.id)}
+                className="shrink-0 cursor-pointer text-muted-foreground hover:text-red-600"
+                aria-label="Remover item"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
             </li>
           ))}
         </ul>
       )}
 
-      <div className="flex gap-2">
+      {/* Formulário de adição */}
+      <div className="space-y-2 border-t border-border pt-3">
         <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
+          value={newTitle}
+          onChange={(e) => setNewTitle(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') {
+            if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault()
               addItem()
             }
           }}
-          placeholder="Novo item de escopo…"
+          placeholder="Título do item…"
           className={inputCls}
         />
-        <Button type="button" variant="outline" size="sm" onClick={addItem}>
+        <textarea
+          value={newDesc}
+          onChange={(e) => setNewDesc(e.target.value)}
+          placeholder="Descrição do que abrange esse item…"
+          rows={2}
+          className={textareaCls}
+        />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={!newTitle.trim()}
+          onClick={addItem}
+        >
           <Plus className="h-4 w-4" />
           Adicionar
         </Button>
       </div>
 
-      <div className="flex justify-end">
+      <div className="flex justify-end pt-1">
         <Button type="button" size="sm" disabled={busy} onClick={save}>
           {busy ? 'Salvando…' : 'Salvar escopo'}
         </Button>

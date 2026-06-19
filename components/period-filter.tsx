@@ -43,7 +43,7 @@ export function PeriodFilter() {
     const params = new URLSearchParams(searchParams.toString())
 
     if (value === 'todos') {
-      params.delete('periodo')
+      params.set('periodo', 'todos')
       params.delete('de')
       params.delete('ate')
     } else if (value === 'personalizado') {

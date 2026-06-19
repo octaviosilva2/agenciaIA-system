@@ -27,6 +27,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarTrigger,
 } from '@/components/ui/sidebar'
 
 /**
@@ -44,7 +45,6 @@ const NAV_GROUPS = [
     items: [
       { title: 'Estratégia', href: '/estrategia', icon: Compass },
       { title: 'NCT', href: '/nct', icon: Target },
-      { title: 'Tarefas', href: '/tarefas', icon: CheckSquare },
     ],
   },
   {
@@ -94,14 +94,18 @@ export function AppSidebar() {
   const pathname = usePathname()
 
   return (
-    <Sidebar>
-      <SidebarHeader className="border-b px-4 py-3">
-        <Link href="/" className="flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <Hexagon className="h-4 w-4" />
-          </div>
-          <span className="text-base font-semibold tracking-tight">CRM Agência</span>
-        </Link>
+    <Sidebar collapsible="icon">
+      <SidebarHeader className="border-b px-2 py-2">
+        {/* expandido: logo + trigger | colapsado: só trigger centralizado */}
+        <div className="flex h-9 items-center justify-between group-data-[collapsible=icon]:justify-center">
+          <Link href="/" className="flex items-center gap-2 group-data-[collapsible=icon]:hidden">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
+              <Hexagon className="h-4 w-4" />
+            </div>
+            <span className="text-base font-semibold tracking-tight">CRM Agência</span>
+          </Link>
+          <SidebarTrigger />
+        </div>
       </SidebarHeader>
       <SidebarContent>
         {NAV_GROUPS.map((group, i) => (

@@ -1,8 +1,7 @@
+import { NctView } from '@/components/nct/nct-view'
+import { MOCK_NARRATIVES, MOCK_COMMITMENTS } from '@/lib/mock/nct'
+
+/** Página NCT (Fase 5 — Gestão), modo MOCK. */
 export default function NCTPage() {
-  return (
-    <div>
-      <h1 className="text-2xl font-bold mb-4">NCT</h1>
-      <p className="text-muted-foreground">Narrativas, compromissos e tarefas — será construído na Fase 5.</p>
-    </div>
-  )
+  return <NctView initialNarratives={MOCK_NARRATIVES} initialCommitments={MOCK_COMMITMENTS} />
 }

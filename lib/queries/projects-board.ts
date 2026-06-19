@@ -33,6 +33,61 @@ function one<T>(value: T | T[] | null | undefined): T | null {
   return Array.isArray(value) ? (value[0] ?? null) : value
 }
 
+/** Projeto elegível para receber um contrato de manutenção (tela /manutencao). */
+export type ContractProjectOption = {
+  projectId: string
+  dealId: string | null
+  projectName: string
+  company: string
+}
+
+type RawEligibleProject = {
+  id: string
+  name: string
+  deal_id: string | null
+  company: { name: string } | { name: string }[] | null
+  deal: { stage: string } | { stage: string }[] | null
+  contracts: { status: string; archived_at: string | null }[] | null
+}
+
+/**
+ * Projetos de negócios fechados que ainda NÃO têm contrato de manutenção ativo.
+ * Alimenta o "Nova manutenção" — selecionar o projeto e criar o contrato.
+ */
+export async function getProjectsForContract(): Promise<ContractProjectOption[]> {
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('projects')
+    .select(
+      `
+      id, name, deal_id,
+      company:companies ( name ),
+      deal:deals ( stage ),
+      contracts ( status, archived_at )
+    `,
+    )
+    .order('name', { ascending: true })
+
+  if (error) throw new Error(`Falha ao carregar projetos: ${error.message}`)
+
+  const projects = (data ?? []) as unknown as RawEligibleProject[]
+
+  return projects
+    .filter((p) => {
+      const closed = one(p.deal)?.stage === 'fechado'
+      const hasActive = (p.contracts ?? []).some(
+        (c) => c.status === 'ativo' && c.archived_at == null,
+      )
+      return closed && !hasActive
+    })
+    .map((p) => ({
+      projectId: p.id,
+      dealId: p.deal_id,
+      projectName: p.name,
+      company: one(p.company)?.name ?? '—',
+    }))
+}
+
 type RawCharge = { amount: number; kind: string; status: string }
 
 /** Soma das cobranças de pagamento (setup/avulso, fora as canceladas). */
@@ -105,8 +160,17 @@ type RawContract = {
   project: { name: string; deal_id: string | null } | { name: string; deal_id: string | null }[] | null
 }
 
-/** Contratos de manutenção ativos. `archived` alterna a visão (ativos × arquivados). */
-export async function getMaintenanceBoard(archived = false): Promise<MaintenanceItem[]> {
+/** Visões da tela de Manutenção: status (ativo/inativo) ou a lixeira (arquivados). */
+export type MaintenanceView = 'ativos' | 'inativos' | 'arquivados'
+
+/**
+ * Contratos de manutenção por visão.
+ * - `ativos`/`inativos`: filtram por status (ativo/encerrado), fora da lixeira.
+ * - `arquivados`: a lixeira reversível (archived_at not null), de qualquer status.
+ */
+export async function getMaintenanceBoard(
+  view: MaintenanceView = 'ativos',
+): Promise<MaintenanceItem[]> {
   const supabase = await createClient()
   let query = supabase
     .from('contracts')
@@ -117,9 +181,12 @@ export async function getMaintenanceBoard(archived = false): Promise<Maintenance
       project:projects ( name, deal_id )
     `,
     )
-    .eq('status', 'ativo')
 
-  query = archived ? query.not('archived_at', 'is', null) : query.is('archived_at', null)
+  if (view === 'arquivados') {
+    query = query.not('archived_at', 'is', null)
+  } else {
+    query = query.is('archived_at', null).eq('status', view === 'ativos' ? 'ativo' : 'encerrado')
+  }
 
   const { data, error } = await query.order('start_date', { ascending: false })
 

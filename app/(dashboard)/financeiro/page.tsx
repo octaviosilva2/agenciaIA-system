@@ -1,8 +1,11 @@
+import { FinanceiroView } from '@/components/finance/financeiro-view'
+import { MOCK_CHARGES, MOCK_PAYABLES } from '@/lib/mock/finance'
+
+/**
+ * Visão geral financeira — MOCK.
+ * Passa todos os dados para a view client, que gerencia filtros e gráficos internamente.
+ * Quando o backend chegar, substitua MOCK_CHARGES/MOCK_PAYABLES por queries reais.
+ */
 export default function FinanceiroPage() {
-  return (
-    <div>
-      <h1 className="text-2xl font-bold mb-4">Visão Geral Financeira</h1>
-      <p className="text-muted-foreground">Dashboard financeiro — será construído na Fase 4.</p>
-    </div>
-  )
+  return <FinanceiroView allCharges={MOCK_CHARGES} allPayables={MOCK_PAYABLES} />
 }

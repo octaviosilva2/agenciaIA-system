@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import type { MaintenanceDetailData } from '@/components/projects/maintenance-detail'
+import type { ChargeRow } from '@/lib/queries/opportunity-detail'
 import type { TaskItem } from '@/components/tasks/tasks-kanban'
 
 function one<T>(value: T | T[] | null | undefined): T | null {
@@ -12,6 +13,7 @@ type RawContract = {
   kind: MaintenanceDetailData['kind']
   status: MaintenanceDetailData['status']
   monthly_value: number | null
+  hourly_rate: number | null
   min_months: number | null
   billing_day: number | null
   start_date: string | null
@@ -21,7 +23,22 @@ type RawContract = {
   notes: string | null
   archived_at: string | null
   company: { id: string; name: string } | { id: string; name: string }[] | null
-  project: { name: string; deal_id: string | null } | { name: string; deal_id: string | null }[] | null
+  project:
+    | { id: string; name: string; deal_id: string | null }
+    | { id: string; name: string; deal_id: string | null }[]
+    | null
+}
+
+type RawCharge = {
+  id: string
+  description: string
+  kind: ChargeRow['kind']
+  amount: number
+  due_date: string
+  status: ChargeRow['status']
+  method: ChargeRow['method']
+  hours: number | null
+  contract_id: string | null
 }
 
 type RawTask = {
@@ -44,10 +61,10 @@ export async function getMaintenanceDetail(contractId: string): Promise<Maintena
     .from('contracts')
     .select(
       `
-      id, kind, status, monthly_value, min_months, billing_day, start_date,
+      id, kind, status, monthly_value, hourly_rate, min_months, billing_day, start_date,
       next_contact_date, contact_frequency_days, sla, notes, archived_at,
       company:companies ( id, name ),
-      project:projects ( name, deal_id )
+      project:projects ( id, name, deal_id )
     `,
     )
     .eq('id', contractId)
@@ -57,6 +74,27 @@ export async function getMaintenanceDetail(contractId: string): Promise<Maintena
   if (!contract) return null
 
   const ct = contract as unknown as RawContract
+
+  // Cobranças do contrato: recorrências (mensal) e serviços avulsos (hora).
+  const { data: chargesData, error: chErr } = await supabase
+    .from('charges')
+    .select('id, description, kind, amount, due_date, status, method, hours, contract_id')
+    .eq('contract_id', contractId)
+    .order('due_date', { ascending: true })
+
+  if (chErr) throw new Error(`Falha ao carregar cobranças: ${chErr.message}`)
+
+  const charges: ChargeRow[] = ((chargesData ?? []) as RawCharge[]).map((c) => ({
+    id: c.id,
+    description: c.description,
+    kind: c.kind,
+    amount: c.amount,
+    dueDate: c.due_date,
+    status: c.status,
+    method: c.method,
+    hours: c.hours,
+    contractId: c.contract_id,
+  }))
 
   const { data: tasksData, error: tErr } = await supabase
     .from('tasks')
@@ -83,12 +121,14 @@ export async function getMaintenanceDetail(contractId: string): Promise<Maintena
   return {
     contractId: ct.id,
     dealId: project?.deal_id ?? null,
+    projectId: project?.id ?? null,
     company: company?.name ?? '—',
     companyId: company?.id ?? '',
     projectName: project?.name ?? null,
     kind: ct.kind,
     status: ct.status,
     monthlyValue: ct.monthly_value,
+    hourlyRate: ct.hourly_rate,
     minMonths: ct.min_months,
     billingDay: ct.billing_day,
     startDate: ct.start_date,
@@ -97,6 +137,7 @@ export async function getMaintenanceDetail(contractId: string): Promise<Maintena
     sla: ct.sla,
     notes: ct.notes,
     archived: ct.archived_at != null,
+    charges,
     tasks,
   }
 }
