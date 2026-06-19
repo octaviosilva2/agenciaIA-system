@@ -183,12 +183,12 @@ export const NARRATIVE_STATUS_LABELS: Record<Enums['narrative_status'], string> 
 
 export const CONTRACT_KIND_LABELS: Record<Enums['contract_kind'], string> = {
   mensal: 'Mensal',
-  avulso: 'Avulso',
+  avulso: 'Hora avulsa',
 }
 
 export const CONTRACT_STATUS_LABELS: Record<Enums['contract_status'], string> = {
   ativo: 'Ativo',
-  encerrado: 'Encerrado',
+  encerrado: 'Inativo',
 }
 
 export const CHARGE_KIND_LABELS: Record<Enums['charge_kind'], string> = {
@@ -211,6 +211,17 @@ export const PAYABLE_CATEGORY_LABELS: Record<Enums['payable_category'], string> 
   ferramentas: 'Ferramentas',
   imposto: 'Imposto',
   outro: 'Outro',
+}
+
+/** Nova estrutura de categorias de contas a pagar (fixo/variavel/imposto).
+ * O schema do banco ainda usa o enum antigo; uma migration vai alinhar quando o backend for ligado.
+ */
+export type MockPayableCategory = 'fixo' | 'variavel' | 'imposto'
+
+export const NEW_PAYABLE_CATEGORY_LABELS: Record<MockPayableCategory, string> = {
+  fixo: 'Fixo',
+  variavel: 'Variável',
+  imposto: 'Imposto',
 }
 
 export const ACTIVITY_TYPE_LABELS: Record<Enums['activity_type'], string> = {
