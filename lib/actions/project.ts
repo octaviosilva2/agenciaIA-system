@@ -72,6 +72,7 @@ export async function setProjectPayment(
   dealId: string,
   companyId: string,
   installments: PaymentInstallment[],
+  cardFeeRate: number = 0, // taxa de maquininha (%) aplicada às parcelas no cartão
 ): Promise<ActionState> {
   if (installments.length === 0) {
     return { success: false, message: 'Adicione ao menos uma parcela.' }
@@ -83,6 +84,7 @@ export async function setProjectPayment(
   const supabase = await createClient()
 
   // Remove as parcelas de fechamento ainda pendentes (não mexe nas pagas/canceladas).
+  // A taxa de maquininha vinculada some por cascade (accounts_payable.source_charge_id).
   const { error: delErr } = await supabase
     .from('charges')
     .delete()
@@ -102,10 +104,46 @@ export async function setProjectPayment(
     method: it.method,
     status: 'pendente' as const,
   }))
-  const { error: insErr } = await supabase.from('charges').insert(rows)
-  if (insErr) return { success: false, message: `Erro ao salvar parcelas: ${insErr.message}` }
+  const { data: created, error: insErr } = await supabase
+    .from('charges')
+    .insert(rows)
+    .select('id, amount, due_date, method, description')
+  if (insErr || !created) {
+    return { success: false, message: `Erro ao salvar parcelas: ${insErr?.message ?? ''}` }
+  }
+
+  // Taxa de maquininha: cada cobrança no cartão gera uma conta a pagar (variável)
+  // vinculada à cobrança via source_charge_id (cascade ao deletar/reconfigurar).
+  if (cardFeeRate > 0) {
+    const feeRows = (
+      created as Array<{
+        id: string
+        amount: number
+        due_date: string
+        method: string | null
+        description: string
+      }>
+    )
+      .filter((c) => c.method === 'cartao')
+      .map((c) => ({
+        description: `Taxa maquininha (${cardFeeRate}%) — ${c.description}`,
+        category: 'variavel' as const,
+        amount: Number(c.amount) * (cardFeeRate / 100),
+        due_date: c.due_date,
+        status: 'pendente' as const,
+        source_charge_id: c.id,
+      }))
+    if (feeRows.length > 0) {
+      const { error: feeErr } = await supabase.from('accounts_payable').insert(feeRows)
+      if (feeErr) {
+        return { success: false, message: `Erro ao lançar taxa de maquininha: ${feeErr.message}` }
+      }
+    }
+  }
 
   revalidatePath(`/projetos/${dealId}`)
+  revalidatePath('/financeiro')
+  revalidatePath('/financeiro/contas')
   return { success: true, message: 'Pagamento atualizado.' }
 }
 

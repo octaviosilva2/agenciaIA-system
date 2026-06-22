@@ -1,11 +1,10 @@
-import { redirect } from 'next/navigation'
 import { AccountsView } from '@/components/finance/accounts-view'
-import { MOCK_CHARGES, MOCK_PAYABLES } from '@/lib/mock/finance'
+import { getAccounts } from '@/lib/queries/finance'
 
 /**
- * Contas (A Receber + A Pagar) — tela unificada.
+ * Contas (A Receber + A Pagar) — Server Component.
  * Aceita `?tab=receber|pagar` para abrir diretamente em uma aba.
- * Abre em "Hoje" por padrão se nenhum período estiver definido.
+ * Abre em "Todos" (todas as abas e todo o período) por padrão.
  */
 export default async function ContasPage({
   searchParams,
@@ -14,27 +13,14 @@ export default async function ContasPage({
 }) {
   const sp = await searchParams
 
-  // Redireciona para o filtro "Hoje" quando nenhum período estiver na URL
-  if (!sp.periodo) {
-    const params = new URLSearchParams()
-    params.set('periodo', 'hoje')
-    if (sp.tab) params.set('tab', sp.tab)
-    redirect(`/financeiro/contas?${params.toString()}`)
-  }
+  const initialTab = sp.tab === 'pagar' ? 'pagar' : sp.tab === 'receber' ? 'receber' : 'todos'
 
-  const initialTab =
-    sp.tab === 'pagar'
-      ? 'pagar'
-      : sp.tab === 'receber'
-        ? 'receber'
-        : sp.tab === 'vencidos'
-          ? 'vencidos'
-          : 'todos'
+  const { charges, payables } = await getAccounts()
 
   return (
     <AccountsView
-      initialCharges={MOCK_CHARGES}
-      initialPayables={MOCK_PAYABLES}
+      initialCharges={charges}
+      initialPayables={payables}
       initialTab={initialTab}
     />
   )

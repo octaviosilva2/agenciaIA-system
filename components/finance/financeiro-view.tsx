@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { ArrowUpRight, ChevronDown } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { formatCurrency, type MockPayableCategory } from '@/lib/format'
-import type { AccountPayable, Charge } from '@/lib/mock/finance'
+import type { AccountPayable, Charge } from '@/lib/queries/finance'
 
 // --- Tipos ---
 
@@ -250,8 +250,10 @@ export function FinanceiroView({ allCharges, allPayables }: Props) {
     }
     const charges = allCharges.filter((c) => c.status !== 'cancelado' && inRange(c.due_date, from, to))
     const payables = allPayables.filter((p) => p.status !== 'cancelado' && inRange(p.due_date, from, to))
-    const grossRevenue = charges.reduce((s, c) => s + c.amount, 0)
-    const totalExpenses = payables.reduce((s, p) => s + p.amount, 0)
+    // Receita/despesa do período = só o CONFIRMADO (pago). O pendente/vencido fica
+    // em "a receber"/"a pagar". Assim o lucro reflete a variação de caixa do período.
+    const grossRevenue = charges.filter((c) => c.status === 'pago').reduce((s, c) => s + c.amount, 0)
+    const totalExpenses = payables.filter((p) => p.status === 'pago').reduce((s, p) => s + p.amount, 0)
     return {
       grossRevenue,
       totalExpenses,
@@ -378,9 +380,9 @@ export function FinanceiroView({ allCharges, allPayables }: Props) {
         </div>
 
         <div className="grid grid-cols-3 gap-3">
-          <StatCard label="Receita bruta" value={formatCurrency(kpis.grossRevenue)} hint="Cobranças do período" />
-          <StatCard label="Total despesas" value={formatCurrency(kpis.totalExpenses)} hint="Contas a pagar do período" />
-          <StatCard label="Lucro" value={formatCurrency(kpis.profit)} hint="Receita menos despesas" highlight={kpis.profit >= 0 ? 'positive' : 'negative'} />
+          <StatCard label="Receita bruta" value={formatCurrency(kpis.grossRevenue)} hint="Recebido no período" />
+          <StatCard label="Total despesas" value={formatCurrency(kpis.totalExpenses)} hint="Pago no período" />
+          <StatCard label="Lucro" value={formatCurrency(kpis.profit)} hint="Entradas menos saídas" highlight={kpis.profit >= 0 ? 'positive' : 'negative'} />
         </div>
         <div className="mt-3 grid grid-cols-3 gap-3">
           <StatCard label="A receber" value={formatCurrency(kpis.toReceive)} hint="Cobranças pendentes" />

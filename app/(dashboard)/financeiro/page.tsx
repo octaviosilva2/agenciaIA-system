@@ -1,11 +1,12 @@
 import { FinanceiroView } from '@/components/finance/financeiro-view'
-import { MOCK_CHARGES, MOCK_PAYABLES } from '@/lib/mock/finance'
+import { getAccounts } from '@/lib/queries/finance'
 
 /**
- * Visão geral financeira — MOCK.
- * Passa todos os dados para a view client, que gerencia filtros e gráficos internamente.
- * Quando o backend chegar, substitua MOCK_CHARGES/MOCK_PAYABLES por queries reais.
+ * Visão geral financeira — Server Component.
+ * Carrega cobranças e contas a pagar do Supabase e passa para a view client,
+ * que gerencia filtros e gráficos internamente.
  */
-export default function FinanceiroPage() {
-  return <FinanceiroView allCharges={MOCK_CHARGES} allPayables={MOCK_PAYABLES} />
+export default async function FinanceiroPage() {
+  const { charges, payables } = await getAccounts()
+  return <FinanceiroView allCharges={charges} allPayables={payables} />
 }

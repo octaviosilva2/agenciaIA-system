@@ -1,6 +1,7 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useTransition } from 'react'
+import Link from 'next/link'
 import { Inbox, Pencil, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { EntityBadge } from '@/components/ui/entity-badge'
@@ -9,6 +10,16 @@ import { PeriodFilter } from '@/components/period-filter'
 import { usePeriodDates } from '@/components/period-filter'
 import { NewAccountDialog } from '@/components/finance/new-account-dialog'
 import { EditAccountDialog } from '@/components/finance/edit-account-dialog'
+import {
+  toggleChargePaid,
+  togglePayablePaid,
+  createCharges,
+  createPayables,
+  updateCharge,
+  updatePayable,
+  deleteCharge,
+  deletePayable,
+} from '@/lib/actions/finance'
 import {
   CHARGE_STATUS,
   CHARGE_OVERDUE,
@@ -19,15 +30,12 @@ import {
   type MockPayableCategory,
 } from '@/lib/format'
 
-import type { Charge, AccountPayable, AccountRow } from '@/lib/mock/finance'
+import type { Charge, AccountPayable, AccountRow } from '@/lib/queries/finance'
 
-// Taxa de imposto aplicada automaticamente ao marcar uma receita como recebida.
-// TODO: virá de org_settings quando o backend for ligado.
-const AUTO_TAX_RATE = 13 // percentual
-
-type Tab = 'todos' | 'receber' | 'pagar' | 'vencidos'
+type Tab = 'todos' | 'receber' | 'pagar'
 type ReceberFilter = 'todos' | 'manutencao' | 'projetos' | 'manual'
 type PagarFilter = 'todos' | MockPayableCategory
+type StatusFilter = 'todos' | 'pago' | 'vencido' | 'pendente'
 
 const RECEBER_FILTERS: Array<{ id: ReceberFilter; label: string }> = [
   { id: 'todos', label: 'Todos' },
@@ -42,6 +50,23 @@ const PAGAR_FILTERS: Array<{ id: PagarFilter; label: string }> = [
   { id: 'variavel', label: NEW_PAYABLE_CATEGORY_LABELS.variavel },
   { id: 'imposto', label: NEW_PAYABLE_CATEGORY_LABELS.imposto },
 ]
+
+// Filtro de baixa, disponível nas abas A Receber e A Pagar.
+const STATUS_FILTERS: Array<{ id: StatusFilter; label: string }> = [
+  { id: 'todos', label: 'Todos' },
+  { id: 'pago', label: 'Pago' },
+  { id: 'vencido', label: 'Vencido' },
+  { id: 'pendente', label: 'Pendente' },
+]
+
+/** Verdadeiro se a linha bate com o filtro de baixa selecionado. */
+function matchesStatus(row: AccountRow, f: StatusFilter): boolean {
+  if (f === 'todos') return true
+  const { status, due_date } = row.data
+  if (f === 'pago') return status === 'pago'
+  if (f === 'vencido') return status === 'pendente' && isOverdue(due_date)
+  return status === 'pendente' && !isOverdue(due_date) // 'pendente' (a vencer)
+}
 
 const mainSegCls = (active: boolean) =>
   `flex h-8 items-center gap-1.5 rounded-[6px] px-2.5 text-sm font-medium transition-colors cursor-pointer ${
@@ -61,9 +86,8 @@ function rowDueDate(row: AccountRow): string {
 
 /**
  * Tela unificada de Contas (A Receber + A Pagar).
- * MOCK: parte do estado inicial vindo do mock e muta só em memória.
- * Quando o backend chegar, troque o estado inicial por dados de query e os
- * handlers por server actions — o layout não muda.
+ * Dados vêm do servidor (getAccounts) via props; mutações são server actions
+ * (lib/actions/finance) e a tela atualiza por revalidação. Layout intocado.
  */
 export function AccountsView({
   initialCharges,
@@ -74,104 +98,92 @@ export function AccountsView({
   initialPayables: AccountPayable[]
   initialTab?: Tab
 }) {
-  const [charges, setCharges] = useState<Charge[]>(initialCharges)
-  const [payables, setPayables] = useState<AccountPayable[]>(initialPayables)
+  // Dados vêm do servidor via props; cada mutação chama uma server action e o
+  // revalidatePath re-renderiza esta tela com os dados atualizados.
+  const charges = initialCharges
+  const payables = initialPayables
   const [tab, setTab] = useState<Tab>(initialTab)
   const [receberFilter, setReceberFilter] = useState<ReceberFilter>('todos')
   const [pagarFilter, setPagarFilter] = useState<PagarFilter>('todos')
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('todos')
   const [editingRow, setEditingRow] = useState<AccountRow | null>(null)
+  const [, startTransition] = useTransition()
   const { from, to } = usePeriodDates()
 
   function changeTab(t: Tab) {
     setTab(t)
     setReceberFilter('todos')
     setPagarFilter('todos')
+    setStatusFilter('todos')
   }
 
-  // --- Mutações MOCK (estado local + toast) ---
+  // --- Mutações (server actions + toast). O estado atualiza por revalidação. ---
 
-  function toggleChargePaid(id: string) {
-    const charge = charges.find((c) => c.id === id)
-    if (!charge) return
-    const willBePaid = charge.status !== 'pago'
-
-    setCharges((prev) =>
-      prev.map((c) => {
-        if (c.id !== id) return c
-        return willBePaid
-          ? { ...c, status: 'pago', paid_at: new Date().toISOString() }
-          : { ...c, status: 'pendente', paid_at: null }
-      }),
-    )
-
-    // Lança (ou remove) imposto automático ao marcar como recebido
-    const taxId = `auto-tax-${id}`
-    if (willBePaid) {
-      setPayables((prev) => {
-        if (prev.find((p) => p.id === taxId)) return prev // já existe
-        const taxPayable: AccountPayable = {
-          id: taxId,
-          description: `Imposto (${AUTO_TAX_RATE}%) — ${charge.description}`,
-          category: 'imposto',
-          amount: charge.amount * (AUTO_TAX_RATE / 100),
-          due_date: charge.due_date,
-          status: 'pendente',
-          paid_at: null,
-          project_id: null,
-          supplier: null,
-          notes: null,
-        }
-        return [taxPayable, ...prev]
-      })
-      toast.success(`Recebido — imposto de ${AUTO_TAX_RATE}% lançado automaticamente.`)
-    } else {
-      setPayables((prev) => prev.filter((p) => p.id !== taxId))
-      toast.success('Marcado como pendente.')
-    }
+  /** Roda uma action, mostra o toast do resultado e executa onSuccess se ok. */
+  function run(
+    action: () => Promise<{ success: boolean; message: string }>,
+    onSuccess?: () => void,
+  ) {
+    startTransition(async () => {
+      const res = await action()
+      if (res.success) {
+        toast.success(res.message)
+        onSuccess?.()
+      } else {
+        toast.error(res.message)
+      }
+    })
   }
 
-  function togglePayablePaid(id: string) {
-    let nowPaid = false
-    setPayables((prev) =>
-      prev.map((p) => {
-        if (p.id !== id) return p
-        nowPaid = p.status !== 'pago'
-        return nowPaid
-          ? { ...p, status: 'pago', paid_at: new Date().toISOString() }
-          : { ...p, status: 'pendente', paid_at: null }
-      }),
-    )
-    toast.success(nowPaid ? 'Pago' : 'Marcado como pendente')
+  function handleToggleCharge(id: string, current: Charge['status']) {
+    run(() => toggleChargePaid(id, current !== 'pago'))
+  }
+
+  function handleTogglePayable(id: string, current: AccountPayable['status']) {
+    run(() => togglePayablePaid(id, current !== 'pago'))
   }
 
   function addCharges(newCharges: Charge[]) {
-    setCharges((prev) => [...newCharges, ...prev])
+    run(() => createCharges(newCharges))
   }
 
   function addPayables(newPayables: AccountPayable[]) {
-    setPayables((prev) => [...newPayables, ...prev])
+    run(() => createPayables(newPayables))
   }
 
-  function deleteCharge(id: string) {
-    setCharges((prev) => prev.filter((c) => c.id !== id))
-    toast.success('Conta removida.')
+  function handleDeleteCharge(id: string) {
+    run(() => deleteCharge(id))
   }
 
-  function deletePayable(id: string) {
-    setPayables((prev) => prev.filter((p) => p.id !== id))
-    toast.success('Conta removida.')
+  function handleDeletePayable(id: string) {
+    run(() => deletePayable(id))
   }
 
-  function updateCharge(id: string, data: Partial<Charge>) {
-    setCharges((prev) => prev.map((c) => (c.id === id ? { ...c, ...data } : c)))
-    setEditingRow(null)
-    toast.success('Conta atualizada.')
+  function handleUpdateCharge(id: string, data: Partial<Charge>) {
+    run(
+      () =>
+        updateCharge(id, {
+          description: data.description ?? '',
+          amount: data.amount ?? 0,
+          due_date: data.due_date ?? '',
+          method: data.method ?? null,
+        }),
+      () => setEditingRow(null),
+    )
   }
 
-  function updatePayable(id: string, data: Partial<AccountPayable>) {
-    setPayables((prev) => prev.map((p) => (p.id === id ? { ...p, ...data } : p)))
-    setEditingRow(null)
-    toast.success('Conta atualizada.')
+  function handleUpdatePayable(id: string, data: Partial<AccountPayable>) {
+    run(
+      () =>
+        updatePayable(id, {
+          description: data.description ?? '',
+          amount: data.amount ?? 0,
+          due_date: data.due_date ?? '',
+          category: data.category ?? 'fixo',
+          supplier: data.supplier ?? null,
+        }),
+      () => setEditingRow(null),
+    )
   }
 
   // --- Linhas filtradas (aba + sub-filtro + período), ordenadas por vencimento ---
@@ -201,36 +213,30 @@ export function AccountsView({
     let all: AccountRow[]
     if (tab === 'receber') all = receivable
     else if (tab === 'pagar') all = payable
-    else if (tab === 'vencidos') {
-      // Tudo pendente e com due_date no passado (A Receber + A Pagar)
-      all = [...receivable, ...payable].filter(
-        (row) => row.data.status === 'pendente' && isOverdue(row.data.due_date),
-      )
-    } else all = [...receivable, ...payable]
+    else all = [...receivable, ...payable]
 
-    // Filtro por período de vencimento — não aplica em Vencidos (já são todos os vencidos)
-    const filtered =
-      tab === 'vencidos'
-        ? all
-        : all.filter((row) => {
-            if (!from && !to) return true
-            const due = new Date(rowDueDate(row))
-            due.setHours(0, 0, 0, 0)
-            if (from && due < from) return false
-            if (to && due > to) return false
-            return true
-          })
+    // Filtro de baixa (pago/vencido/pendente) — só nas abas A Receber e A Pagar
+    if ((tab === 'receber' || tab === 'pagar') && statusFilter !== 'todos') {
+      all = all.filter((row) => matchesStatus(row, statusFilter))
+    }
+
+    // Filtro por período de vencimento
+    const filtered = all.filter((row) => {
+      if (!from && !to) return true
+      const due = new Date(rowDueDate(row))
+      due.setHours(0, 0, 0, 0)
+      if (from && due < from) return false
+      if (to && due > to) return false
+      return true
+    })
 
     return filtered.sort(
       (a, b) => new Date(rowDueDate(a)).getTime() - new Date(rowDueDate(b)).getTime(),
     )
-  }, [charges, payables, tab, receberFilter, pagarFilter, from, to])
+  }, [charges, payables, tab, receberFilter, pagarFilter, statusFilter, from, to])
 
-  const emptyMessage = tab === 'vencidos' ? 'Nenhuma conta vencida' : 'Nenhuma conta neste filtro'
-  const emptyHint =
-    tab === 'vencidos'
-      ? 'Tudo em dia! Nenhuma conta com prazo expirado.'
-      : 'Lance uma conta a receber ou a pagar clicando em + Nova conta.'
+  const emptyMessage = 'Nenhuma conta neste filtro'
+  const emptyHint = 'Lance uma conta a receber ou a pagar clicando em + Nova conta.'
 
   // Rótulo da coluna de baixa muda com a aba ativa
   const baixaLabel = tab === 'pagar' ? 'Pago' : tab === 'receber' ? 'Recebido' : 'Baixa'
@@ -260,20 +266,15 @@ export function AccountsView({
           <button type="button" onClick={() => changeTab('pagar')} aria-pressed={tab === 'pagar'} className={mainSegCls(tab === 'pagar')}>
             A Pagar
           </button>
-          <button type="button" onClick={() => changeTab('vencidos')} aria-pressed={tab === 'vencidos'} className={mainSegCls(tab === 'vencidos')}>
-            Vencidos
-          </button>
         </div>
-        {tab !== 'vencidos' && (
-          <div className="ml-auto">
-            <PeriodFilter />
-          </div>
-        )}
+        <div className="ml-auto">
+          <PeriodFilter />
+        </div>
       </div>
 
       {/* Sub-filtros (aparecem só quando uma aba específica está ativa) */}
       {tab === 'receber' && (
-        <div className="flex items-center gap-1">
+        <div className="flex flex-wrap items-center gap-1">
           {RECEBER_FILTERS.map((f) => (
             <button
               key={f.id}
@@ -284,10 +285,11 @@ export function AccountsView({
               {f.label}
             </button>
           ))}
+          <StatusFilterGroup value={statusFilter} onChange={setStatusFilter} />
         </div>
       )}
       {tab === 'pagar' && (
-        <div className="flex items-center gap-1">
+        <div className="flex flex-wrap items-center gap-1">
           {PAGAR_FILTERS.map((f) => (
             <button
               key={f.id}
@@ -298,6 +300,7 @@ export function AccountsView({
               {f.label}
             </button>
           ))}
+          <StatusFilterGroup value={statusFilter} onChange={setStatusFilter} />
         </div>
       )}
 
@@ -321,17 +324,17 @@ export function AccountsView({
                 <AccountTableRow
                   key={`${row.type}-${row.data.id}`}
                   row={row}
-                  showType={tab === 'vencidos' || tab === 'todos'}
+                  showType={tab === 'todos'}
                   onTogglePaid={
                     row.type === 'receber'
-                      ? () => toggleChargePaid(row.data.id)
-                      : () => togglePayablePaid(row.data.id)
+                      ? () => handleToggleCharge(row.data.id, row.data.status)
+                      : () => handleTogglePayable(row.data.id, row.data.status)
                   }
                   onEdit={() => setEditingRow(row)}
                   onDelete={
                     row.type === 'receber'
-                      ? () => deleteCharge(row.data.id)
-                      : () => deletePayable(row.data.id)
+                      ? () => handleDeleteCharge(row.data.id)
+                      : () => handleDeletePayable(row.data.id)
                   }
                 />
               ))}
@@ -345,8 +348,8 @@ export function AccountsView({
         <EditAccountDialog
           row={editingRow}
           onClose={() => setEditingRow(null)}
-          onSaveCharge={updateCharge}
-          onSavePayable={updatePayable}
+          onSaveCharge={handleUpdateCharge}
+          onSavePayable={handleUpdatePayable}
         />
       )}
     </div>
@@ -376,6 +379,10 @@ function AccountTableRow({
   const supplierLabel =
     !showType && type === 'pagar' ? (row.data as AccountPayable).supplier : null
 
+  // Origem da cobrança (projeto/contrato) com link para a tela de origem — só A Receber.
+  const originLabel = type === 'receber' ? (data as Charge).origin_label : null
+  const originHref = type === 'receber' ? (data as Charge).origin_href : null
+
   const amountLabel =
     type === 'pagar' ? `− ${formatCurrency(data.amount)}` : formatCurrency(data.amount)
 
@@ -398,6 +405,17 @@ function AccountTableRow({
         {supplierLabel && (
           <p className="text-xs text-muted-foreground">{supplierLabel}</p>
         )}
+        {originLabel &&
+          (originHref ? (
+            <Link
+              href={originHref}
+              className="text-xs text-muted-foreground transition-colors hover:text-foreground hover:underline"
+            >
+              {originLabel}
+            </Link>
+          ) : (
+            <p className="text-xs text-muted-foreground">{originLabel}</p>
+          ))}
       </td>
 
       {/* Valor — verde para receber, vermelho para pagar */}
@@ -465,6 +483,31 @@ function AccountTableRow({
         </div>
       </td>
     </tr>
+  )
+}
+
+/** Filtro de baixa (pago/vencido/pendente) — usado nas abas A Receber e A Pagar. */
+function StatusFilterGroup({
+  value,
+  onChange,
+}: {
+  value: StatusFilter
+  onChange: (v: StatusFilter) => void
+}) {
+  return (
+    <div className="ml-auto flex items-center gap-1">
+      <span className="mr-1 text-xs text-muted-foreground">Baixa:</span>
+      {STATUS_FILTERS.map((f) => (
+        <button
+          key={f.id}
+          type="button"
+          onClick={() => onChange(f.id)}
+          className={subSegCls(value === f.id)}
+        >
+          {f.label}
+        </button>
+      ))}
+    </div>
   )
 }
 

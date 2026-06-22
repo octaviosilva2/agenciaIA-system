@@ -10,57 +10,10 @@
  * que a UI já consome (snake_case, igual ao schema). Trocar nome = quebrar a UI.
  */
 
-import type { Database } from '@/lib/supabase/types'
-import type { MockPayableCategory } from '@/lib/format'
-
-type Enums = Database['public']['Enums']
-
-// --- Tipos das duas tabelas financeiras (subconjunto que a UI usa) ---
-
-/** Conta a receber (tabela `charges`). */
-export type Charge = {
-  id: string
-  company_id: string | null
-  project_id: string | null
-  contract_id: string | null
-  description: string
-  kind: Enums['charge_kind']
-  amount: number
-  due_date: string // ISO yyyy-MM-dd
-  status: Enums['charge_status']
-  method: Enums['charge_method'] | null
-  paid_at: string | null // ISO datetime quando pago
-  notes: string | null
-  // Campo auxiliar só de exibição (a origem real vem do join project/contract no backend).
-  origin_label: string | null
-}
-
-/**
- * Conta a pagar (tabela `accounts_payable`).
- * NOTA: category usa MockPayableCategory no mock. Quando o backend for ligado,
- * uma migration vai alinhar o enum do banco às novas categorias (fixo/variavel/imposto).
- */
-export type AccountPayable = {
-  id: string
-  description: string
-  category: MockPayableCategory
-  amount: number
-  due_date: string // ISO yyyy-MM-dd
-  status: Enums['charge_status'] // reusa charge_status (pendente/pago/cancelado)
-  paid_at: string | null
-  project_id: string | null
-  supplier: string | null
-  notes: string | null
-}
-
-/**
- * Linha unificada do extrato (A Receber + A Pagar na mesma tabela).
- * `kind: 'receber'` carrega o Charge; `kind: 'pagar'` carrega o AccountPayable.
- * É um tipo só de UI — o backend continua expondo as duas tabelas separadas.
- */
-export type AccountRow =
-  | { type: 'receber'; data: Charge }
-  | { type: 'pagar'; data: AccountPayable }
+// Os tipos agora vivem na camada de queries (lib/queries/finance.ts); re-exportados
+// aqui para o Dashboard (Sessão 4), que ainda consome os MOCK_* deste arquivo.
+import type { Charge, AccountPayable, AccountRow } from '@/lib/queries/finance'
+export type { Charge, AccountPayable, AccountRow }
 
 // --- Alíquota mock (virá de org_settings no backend) ---
 // NOTA: ainda consumida pelo Dashboard (app/(dashboard)/page.tsx).

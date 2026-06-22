@@ -23,7 +23,7 @@ import {
   formatCurrency,
   type MockPayableCategory,
 } from '@/lib/format'
-import type { Charge, AccountPayable } from '@/lib/mock/finance'
+import type { Charge, AccountPayable } from '@/lib/queries/finance'
 
 // --- Estilos base ---
 

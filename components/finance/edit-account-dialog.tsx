@@ -16,7 +16,7 @@ import {
   NEW_PAYABLE_CATEGORY_LABELS,
   type MockPayableCategory,
 } from '@/lib/format'
-import type { Charge, AccountPayable, AccountRow } from '@/lib/mock/finance'
+import type { Charge, AccountPayable, AccountRow } from '@/lib/queries/finance'
 
 type Props = {
   row: AccountRow

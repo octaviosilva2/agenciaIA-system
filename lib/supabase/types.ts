@@ -25,6 +25,7 @@ export type Database = {
           notes: string | null
           paid_at: string | null
           project_id: string | null
+          source_charge_id: string | null
           status: Database["public"]["Enums"]["charge_status"]
           supplier: string | null
           updated_at: string
@@ -39,6 +40,7 @@ export type Database = {
           notes?: string | null
           paid_at?: string | null
           project_id?: string | null
+          source_charge_id?: string | null
           status?: Database["public"]["Enums"]["charge_status"]
           supplier?: string | null
           updated_at?: string
@@ -53,6 +55,7 @@ export type Database = {
           notes?: string | null
           paid_at?: string | null
           project_id?: string | null
+          source_charge_id?: string | null
           status?: Database["public"]["Enums"]["charge_status"]
           supplier?: string | null
           updated_at?: string
@@ -63,6 +66,13 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "accounts_payable_source_charge_id_fkey"
+            columns: ["source_charge_id"]
+            isOneToOne: false
+            referencedRelation: "charges"
             referencedColumns: ["id"]
           },
         ]
@@ -1002,7 +1012,7 @@ export type Database = {
       deal_urgency: "baixa" | "media" | "alta"
       level_scale: "baixo" | "medio" | "alto"
       narrative_status: "ativa" | "concluida" | "arquivada"
-      payable_category: "infra" | "freela" | "ferramentas" | "imposto" | "outro"
+      payable_category: "fixo" | "variavel" | "imposto"
       project_status:
         | "a_iniciar"
         | "briefing"
@@ -1164,7 +1174,7 @@ export const Constants = {
       deal_urgency: ["baixa", "media", "alta"],
       level_scale: ["baixo", "medio", "alto"],
       narrative_status: ["ativa", "concluida", "arquivada"],
-      payable_category: ["infra", "freela", "ferramentas", "imposto", "outro"],
+      payable_category: ["fixo", "variavel", "imposto"],
       project_status: ["a_iniciar", "briefing", "desenvolvimento", "revisao", "entregue"],
       strategy_block_kind: ["missao", "proposito", "swot", "asis_tobe", "blueprint"],
       task_area: ["gestao", "comercial", "operacional", "financeiro", "sistema"],

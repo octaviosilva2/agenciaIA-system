@@ -206,17 +206,16 @@ export const CHARGE_METHOD_LABELS: Record<Enums['charge_method'], string> = {
 }
 
 export const PAYABLE_CATEGORY_LABELS: Record<Enums['payable_category'], string> = {
-  infra: 'Infra',
-  freela: 'Freela',
-  ferramentas: 'Ferramentas',
+  fixo: 'Fixo',
+  variavel: 'Variável',
   imposto: 'Imposto',
-  outro: 'Outro',
 }
 
-/** Nova estrutura de categorias de contas a pagar (fixo/variavel/imposto).
- * O schema do banco ainda usa o enum antigo; uma migration vai alinhar quando o backend for ligado.
+/**
+ * Categoria de conta a pagar (fixo/variavel/imposto). Desde a migration 0011 o
+ * enum do banco está alinhado a estes valores — o tipo deriva direto do schema.
  */
-export type MockPayableCategory = 'fixo' | 'variavel' | 'imposto'
+export type MockPayableCategory = Enums['payable_category']
 
 export const NEW_PAYABLE_CATEGORY_LABELS: Record<MockPayableCategory, string> = {
   fixo: 'Fixo',
