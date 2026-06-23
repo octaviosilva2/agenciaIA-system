@@ -12,7 +12,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { commitmentSchema } from '@/lib/validations/nct'
 import { COMMITMENT_TYPE, CONFIDENCE_LABELS } from '@/lib/format'
-import { MOCK_PROFILES } from '@/lib/mock/profiles'
+import type { TeamProfile } from '@/lib/queries/config'
 import type { Commitment } from '@/lib/mock/nct'
 import type { Database } from '@/lib/supabase/types'
 
@@ -40,12 +40,14 @@ const NONE = 'none'
 export function CommitmentDialog({
   commitment,
   narrativeId,
+  profiles,
   open,
   onOpenChange,
   onSubmit,
 }: {
   commitment: Commitment | null
   narrativeId: string
+  profiles: TeamProfile[]
   open: boolean
   onOpenChange: (open: boolean) => void
   onSubmit: (commitment: Commitment) => void
@@ -173,7 +175,7 @@ export function CommitmentDialog({
                 className={selectCls}
               >
                 <option value={NONE}>—</option>
-                {MOCK_PROFILES.map((p) => (
+                {profiles.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
                   </option>

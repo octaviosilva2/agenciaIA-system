@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils'
-import { initialsOf } from '@/lib/mock/profiles'
+import { initialsOf } from '@/lib/format'
 
 /**
  * Avatar de iniciais (design system §5.5): iniciais sobre bg-primary, rounded-full.

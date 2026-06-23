@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { TASK_STATUS, TASK_PRIORITY, TASK_AREA_LABELS } from '@/lib/format'
-import { MOCK_PROFILES } from '@/lib/mock/profiles'
+import type { TeamProfile } from '@/lib/queries/config'
 import type { ManagedTask } from '@/lib/mock/tasks'
 import type { Database } from '@/lib/supabase/types'
 
@@ -38,11 +38,13 @@ const NONE = 'none'
  */
 export function LinkedTaskDialog({
   commitmentId,
+  profiles,
   open,
   onOpenChange,
   onCreate,
 }: {
   commitmentId: string
+  profiles: TeamProfile[]
   open: boolean
   onOpenChange: (open: boolean) => void
   onCreate: (task: ManagedTask) => void
@@ -179,7 +181,7 @@ export function LinkedTaskDialog({
                 className={selectCls}
               >
                 <option value={NONE}>—</option>
-                {MOCK_PROFILES.map((p) => (
+                {profiles.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
                   </option>

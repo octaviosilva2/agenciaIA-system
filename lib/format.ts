@@ -232,6 +232,66 @@ export const ACTIVITY_TYPE_LABELS: Record<Enums['activity_type'], string> = {
   outro: 'Outro',
 }
 
+/**
+ * Metadados FIXOS de UI dos blocos de Estratégia: título + descrição (PT-BR).
+ * Não vêm do banco — são texto de interface. A ordem das chaves define a ordem
+ * das abas. (A query em lib/queries/strategy reusa esta ordem para ordenar.)
+ */
+export const STRATEGY_BLOCK_META: Record<
+  Enums['strategy_block_kind'],
+  { title: string; description: string }
+> = {
+  missao: {
+    title: 'Missão',
+    description:
+      'O que a empresa faz, para quem e por quê — em uma frase. É a razão de existir no presente.',
+  },
+  proposito: {
+    title: 'Propósito',
+    description:
+      'A causa maior por trás do negócio: o impacto que queremos gerar além do lucro.',
+  },
+  swot: {
+    title: 'SWOT',
+    description:
+      'Diagnóstico em quatro quadrantes: forças e fraquezas (internas) · oportunidades e ameaças (externas).',
+  },
+  asis_tobe: {
+    title: 'AS IS → TO BE',
+    description:
+      'Onde estamos hoje (estado atual) e onde queremos chegar (estado desejado). A distância entre os dois é a estratégia.',
+  },
+  blueprint: {
+    title: 'Blueprint de Negócio',
+    description:
+      'O desenho do modelo: por onde chegamos ao cliente, como geramos receita, o que entregamos de valor e para quem.',
+  },
+}
+
+// =====================================================================
+// Helpers de equipe / perfis (exibição).
+// =====================================================================
+
+/** Iniciais (até 2 letras) a partir do nome — para o Avatar (design system §5.5). */
+export function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/)
+  if (parts.length === 0) return '?'
+  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase()
+  return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase()
+}
+
+/**
+ * Acha um perfil pelo id dentro de uma lista recebida (ou undefined).
+ * Opera sobre a lista passada por prop — não há mais array global de perfis.
+ */
+export function findProfile<T extends { id: string }>(
+  profiles: T[],
+  id: string | null | undefined,
+): T | undefined {
+  if (!id) return undefined
+  return profiles.find((p) => p.id === id)
+}
+
 // =====================================================================
 // Helpers de número e data (pt-BR).
 // =====================================================================

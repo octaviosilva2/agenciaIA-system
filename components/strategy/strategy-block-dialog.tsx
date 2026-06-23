@@ -11,10 +11,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import {
-  STRATEGY_BLOCK_META,
-  type StrategyBlock,
-} from '@/lib/mock/strategy'
+import { STRATEGY_BLOCK_META } from '@/lib/format'
+import type { StrategyBlock } from '@/lib/queries/strategy'
 
 const labelCls = 'mb-1 block text-xs font-medium'
 const textareaCls =

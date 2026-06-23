@@ -26,8 +26,9 @@ import {
   LEVEL_SCALE_LABELS,
   deliveryCountdown,
   isOverdue,
+  findProfile,
 } from '@/lib/format'
-import { findProfile } from '@/lib/mock/profiles'
+import type { TeamProfile } from '@/lib/queries/config'
 import { PROJECT_LABELS, type ManagedTask } from '@/lib/mock/tasks'
 import type { Commitment, Narrative } from '@/lib/mock/nct'
 import type { Database } from '@/lib/supabase/types'
@@ -49,12 +50,14 @@ const selectCls =
 function TaskCardContent({
   task,
   commitmentTitle,
+  profiles,
 }: {
   task: ManagedTask
   commitmentTitle: string | undefined
+  profiles: TeamProfile[]
 }) {
   const overdue = task.status !== 'done' && isOverdue(task.due_date)
-  const assignee = findProfile(task.assignee_id)
+  const assignee = findProfile(profiles, task.assignee_id)
   const projectLabel = task.project_id ? PROJECT_LABELS[task.project_id] : undefined
 
   return (
@@ -116,10 +119,12 @@ function TaskCardContent({
 function DraggableTaskCard({
   task,
   commitmentTitle,
+  profiles,
   onOpen,
 }: {
   task: ManagedTask
   commitmentTitle: string | undefined
+  profiles: TeamProfile[]
   onOpen: (task: ManagedTask) => void
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: task.id })
@@ -132,7 +137,7 @@ function DraggableTaskCard({
       {...attributes}
       {...listeners}
     >
-      <TaskCardContent task={task} commitmentTitle={commitmentTitle} />
+      <TaskCardContent task={task} commitmentTitle={commitmentTitle} profiles={profiles} />
     </div>
   )
 }
@@ -142,12 +147,14 @@ function Column({
   status,
   tasks,
   commitmentTitleOf,
+  profiles,
   onOpen,
   onAdd,
 }: {
   status: TaskStatus
   tasks: ManagedTask[]
   commitmentTitleOf: (id: string | null) => string | undefined
+  profiles: TeamProfile[]
   onOpen: (task: ManagedTask) => void
   onAdd: (status: TaskStatus) => void
 }) {
@@ -183,6 +190,7 @@ function Column({
               key={t.id}
               task={t}
               commitmentTitle={commitmentTitleOf(t.commitment_id)}
+              profiles={profiles}
               onOpen={onOpen}
             />
           ))
@@ -202,10 +210,12 @@ export function TasksBoard({
   initialTasks,
   commitments,
   narratives,
+  profiles,
 }: {
   initialTasks: ManagedTask[]
   commitments: Commitment[]
   narratives: Narrative[]
+  profiles: TeamProfile[]
 }) {
   const [tasks, setTasks] = useState<ManagedTask[]>(initialTasks)
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -233,8 +243,8 @@ export function TasksBoard({
   // Pessoas presentes nas tarefas (para o select de responsável).
   const assigneeOptions = useMemo(() => {
     const ids = new Set(tasks.map((t) => t.assignee_id).filter((x): x is string => !!x))
-    return [...ids].map((id) => ({ id, name: findProfile(id)?.name ?? 'Desconhecido' }))
-  }, [tasks])
+    return [...ids].map((id) => ({ id, name: findProfile(profiles, id)?.name ?? 'Desconhecido' }))
+  }, [tasks, profiles])
 
   // Lista filtrada (aplica todos os eixos).
   const filtered = useMemo(
@@ -429,6 +439,7 @@ export function TasksBoard({
                 status={status}
                 tasks={filtered.filter((t) => t.status === status)}
                 commitmentTitleOf={commitmentTitleOf}
+                profiles={profiles}
                 onOpen={openEdit}
                 onAdd={openCreate}
               />
@@ -439,6 +450,7 @@ export function TasksBoard({
               <TaskCardContent
                 task={activeTask}
                 commitmentTitle={commitmentTitleOf(activeTask.commitment_id)}
+                profiles={profiles}
               />
             ) : null}
           </DragOverlay>
@@ -449,6 +461,7 @@ export function TasksBoard({
         task={editing}
         defaultStatus={creatingStatus}
         commitments={commitments}
+        profiles={profiles}
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         onSubmit={handleSubmit}

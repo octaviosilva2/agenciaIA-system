@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation'
 import { CommitmentDetailView } from '@/components/nct/commitment-detail-view'
+import { getProfiles } from '@/lib/queries/config'
 import {
   MOCK_COMMITMENTS,
   MOCK_NARRATIVES,
@@ -25,6 +26,7 @@ export default async function CommitmentDetailPage({
   const narrative = MOCK_NARRATIVES.find((n) => n.id === commitment.narrative_id)
   const checkins = MOCK_CHECKINS.filter((ck) => ck.commitment_id === commitmentId)
   const tasks = tasksByCommitment(commitmentId)
+  const profiles = await getProfiles()
 
   return (
     <CommitmentDetailView
@@ -32,6 +34,7 @@ export default async function CommitmentDetailPage({
       narrative={narrative}
       initialCheckins={checkins}
       initialTasks={tasks}
+      profiles={profiles}
     />
   )
 }

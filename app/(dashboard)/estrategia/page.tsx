@@ -1,11 +1,12 @@
 import { StrategyView } from '@/components/strategy/strategy-view'
-import { MOCK_STRATEGY_BLOCKS } from '@/lib/mock/strategy'
+import { getStrategyBlocks } from '@/lib/queries/strategy'
 
 /**
- * Página de Estratégia (Fase 5 — Gestão), modo MOCK.
- * RSC só carrega os 5 blocos fixos do mock e entrega à view client, que faz a
- * edição em memória. Quando o backend chegar, troque o mock por uma query.
+ * Página de Estratégia (Fase 5 — Gestão).
+ * Server Component: carrega os 5 blocos fixos do banco e entrega à view client,
+ * que edita via server action (updateStrategyBlock).
  */
-export default function EstrategiaPage() {
-  return <StrategyView initialBlocks={MOCK_STRATEGY_BLOCKS} />
+export default async function EstrategiaPage() {
+  const blocks = await getStrategyBlocks()
+  return <StrategyView initialBlocks={blocks} />
 }

@@ -30,8 +30,9 @@ import {
   formatDateTime,
   deliveryCountdown,
   isOverdue,
+  findProfile,
 } from '@/lib/format'
-import { findProfile } from '@/lib/mock/profiles'
+import type { TeamProfile } from '@/lib/queries/config'
 import type { Commitment, Narrative, Checkin } from '@/lib/mock/nct'
 import type { ManagedTask } from '@/lib/mock/tasks'
 import type { Database } from '@/lib/supabase/types'
@@ -49,11 +50,13 @@ export function CommitmentDetailView({
   narrative,
   initialCheckins,
   initialTasks,
+  profiles,
 }: {
   commitment: Commitment
   narrative: Narrative | undefined
   initialCheckins: Checkin[]
   initialTasks: ManagedTask[]
+  profiles: TeamProfile[]
 }) {
   const [commitment, setCommitment] = useState<Commitment>(initialCommitment)
   const [checkins, setCheckins] = useState<Checkin[]>(initialCheckins)
@@ -70,7 +73,7 @@ export function CommitmentDetailView({
   const [editTaskOpen, setEditTaskOpen] = useState(false)
   const [editingTask, setEditingTask] = useState<ManagedTask | null>(null)
 
-  const dri = findProfile(commitment.dri_id)
+  const dri = findProfile(profiles, commitment.dri_id)
 
   // Histórico em ordem cronológica reversa (mais recente no topo).
   const orderedCheckins = useMemo(
@@ -265,7 +268,7 @@ export function CommitmentDetailView({
             ) : (
               <ul className="space-y-2">
                 {orderedCheckins.map((ck) => {
-                  const author = findProfile(ck.author_id)
+                  const author = findProfile(profiles, ck.author_id)
                   return (
                     <li key={ck.id} className="rounded-md border border-border p-3">
                       <div className="flex items-center gap-2">
@@ -318,6 +321,7 @@ export function CommitmentDetailView({
 
       <LinkedTaskDialog
         commitmentId={commitment.id}
+        profiles={profiles}
         open={taskDialogOpen}
         onOpenChange={setTaskDialogOpen}
         onCreate={addLinkedTask}
@@ -327,6 +331,7 @@ export function CommitmentDetailView({
         task={editingTask}
         defaultStatus={editingTask?.status ?? 'todo'}
         commitments={[commitment]}
+        profiles={profiles}
         open={editTaskOpen}
         onOpenChange={setEditTaskOpen}
         onSubmit={handleEditTask}

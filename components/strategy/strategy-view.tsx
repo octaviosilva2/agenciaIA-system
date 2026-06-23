@@ -1,23 +1,25 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useTransition } from 'react'
 import { toast } from 'sonner'
 import { Pencil, ArrowRight, Share2, TrendingUp, Sparkles, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { StrategyBlockDialog } from '@/components/strategy/strategy-block-dialog'
-import { STRATEGY_BLOCK_META, type StrategyBlock } from '@/lib/mock/strategy'
+import { updateStrategyBlock } from '@/lib/actions/strategy'
+import { STRATEGY_BLOCK_META } from '@/lib/format'
+import type { StrategyBlock } from '@/lib/queries/strategy'
 
 /**
  * Tela de Estratégia: 5 blocos fixos em abas (uma por vez).
- * MOCK: estado inicial vindo do mock, muta só em memória + toast.
- * Quando o backend chegar, troque o estado inicial por dados de query e o
- * onSave por uma server action de update — o layout não muda.
+ * Estado inicial vem da query (server); salvar persiste via server action
+ * (updateStrategyBlock) e espelha o resultado no estado local — o layout não muda.
  */
 export function StrategyView({ initialBlocks }: { initialBlocks: StrategyBlock[] }) {
   const [blocks, setBlocks] = useState<StrategyBlock[]>(initialBlocks)
   const [editing, setEditing] = useState<StrategyBlock | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [, startTransition] = useTransition()
 
   function openEdit(block: StrategyBlock) {
     setEditing(block)
@@ -25,14 +27,21 @@ export function StrategyView({ initialBlocks }: { initialBlocks: StrategyBlock[]
   }
 
   function handleSave(updated: StrategyBlock) {
-    /* Atualiza em memória — backend: trocar por server action */
-    setBlocks((prev) =>
-      prev.map((b) =>
-        b.id === updated.id ? { ...updated, updated_at: new Date().toISOString() } : b,
-      ),
-    )
-    setDialogOpen(false)
-    toast.success(`${STRATEGY_BLOCK_META[updated.kind].title} atualizado.`)
+    // Persiste no banco; ao confirmar, espelha no estado local + fecha o dialog.
+    startTransition(async () => {
+      const res = await updateStrategyBlock(updated)
+      if (!res.success) {
+        toast.error(res.message)
+        return
+      }
+      setBlocks((prev) =>
+        prev.map((b) =>
+          b.id === updated.id ? { ...updated, updated_at: new Date().toISOString() } : b,
+        ),
+      )
+      setDialogOpen(false)
+      toast.success(`${STRATEGY_BLOCK_META[updated.kind].title} atualizado.`)
+    })
   }
 
   return (

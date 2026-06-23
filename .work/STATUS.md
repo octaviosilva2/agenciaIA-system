@@ -1,6 +1,6 @@
 # Status do Projeto
 
-## Fase atual: BACKEND das Fases 4–6 em andamento. ✅ Sessão 1 — Financeiro (real). Próximo: Sessão 2 — Estratégia + Profiles.
+## Fase atual: BACKEND das Fases 4–6 em andamento. ✅ Sessão 1 — Financeiro. ✅ Sessão 2 — Estratégia + Profiles. Próximo: Sessão 3 — NCT + Tarefas.
 
 Stack: Next.js 16 (App Router, Turbopack) + Tailwind v4 + shadcn/base-ui + Supabase. UI-first com mini-gates. Banco real, limpo (só "Moda em Foco (TESTE)").
 
@@ -44,10 +44,11 @@ Stack: Next.js 16 (App Router, Turbopack) + Tailwind v4 + shadcn/base-ui + Supab
   - **Migrations:** `0011` (enum `payable_category`→fixo/variavel/imposto), `0012` (`accounts_payable.source_charge_id` FK+cascade), `0013` (índice `uq_charge_contract_due` parcial→completo — corrige `ON CONFLICT` da manutenção). Types regenerados.
   - `/config` já era real (`getOrgSettings`/`getProfiles`/`updateOrgSettings`).
 - **Fase 5 — Gestão** (`lib/mock/strategy.ts`, `lib/mock/nct.ts`, `lib/mock/tasks.ts`, `lib/mock/profiles.ts`):
-  - `/estrategia` — `components/strategy/strategy-view.tsx` + `strategy-block-dialog.tsx`: 5 blocos fixos só-edição (**SWOT matriz 2×2**, **AS IS→TO BE** lado a lado, **Blueprint** 4 campos).
+  - `/estrategia` ✅ **BACKEND REAL (Sessão 2)**: `lib/queries/strategy.ts` (`getStrategyBlocks` — tipos movidos do mock; ordem canônica derivada de `STRATEGY_BLOCK_META`, que mora em `lib/format.ts` por ser label PT-BR consumida por client), `lib/validations/strategy.ts` (schema zod do `content` por kind, `.strict()`), `lib/actions/strategy.ts` (`updateStrategyBlock` — **só UPDATE** do content, validado por kind, filtro `id`+`kind` trava criar/excluir; revalida `/estrategia`). Religados sem mexer no JSX: page (Server Component), `strategy-view` (salva via action + `useTransition`), `strategy-block-dialog`. 5 blocos fixos só-edição (**SWOT matriz 2×2**, **AS IS→TO BE** lado a lado, **Blueprint** 4 campos). Seed 0006 confirmado; sem migration.
   - `/nct` — `components/nct/nct-view.tsx` (+ `narrative-dialog`, `commitment-dialog`, `nct-bits`): 3 cards de métrica + `PeriodFilter` + narrativas **expansíveis inline** + compromissos (badge `COMMITMENT_TYPE`, **ponto de confiança** `CONFIDENCE_DOT`, % em barra).
   - `/nct/[commitmentId]` — `components/nct/commitment-detail-view.tsx` (+ `checkin-form`, `linked-task-dialog`): header com **% editável inline**, check-ins (form + histórico reverso), tarefas vinculadas.
   - `/tarefas` — `components/tasks/tasks-board.tsx` + `task-board-dialog.tsx`: board **PRÓPRIO** (NÃO mexe no `tasks-kanban` congelado), 5 colunas com drag, filtros (projeto/compromisso/área/pessoa/prioridade), card rico (responsável `InitialsAvatar`, vínculos, impacto×esforço).
+  - **Profiles (Sessão 2 — destrava NCT/Tarefas):** `initialsOf` + novo `findProfile(profiles, id)` movidos para `lib/format.ts`. NCT/Tarefas (3 views + 4 dialogs) viraram **refactor de props**: recebem `profiles` por prop; as pages (`/nct`, `/nct/[id]`, `/tarefas`) carregam `getProfiles()` (Server Component) → selects de DRI/responsável listam a equipe real (§4.3). `lib/mock/profiles.ts` reduzido aos 4 UUIDs ainda usados pelos mocks de nct/tasks. **Dados de nct/tasks seguem MOCK** (religados na Sessão 3) — DRIs mock apontam UUIDs fantasma → avatar "—", esperado (§4.5).
 - **Fase 6 — Dashboard** (`lib/mock/dashboard.ts`):
   - `/` — `components/dashboard/dashboard-view.tsx`: 5 blocos (Financeiro · Comercial · Operacional · NCT com link + **Tarefas de hoje** com **concluir inline**). Deriva dos mocks de finance/nct/tasks; agregados de Comercial/Operacional no mock dedicado.
 - **Compartilhado novo:** `components/ui-shared/initials-avatar.tsx` (avatar de iniciais — design system §5.5).
@@ -83,10 +84,10 @@ Stack: Next.js 16 (App Router, Turbopack) + Tailwind v4 + shadcn/base-ui + Supab
 1. ~~Fase 2 (Comercial)~~ ✅ COMPLETA.
 2. ~~Fase 3 (Operacional)~~ ✅ COMPLETA: `/implementacao/[id]` **só front/mock** (backend a cargo do sócio dev); Manutenção com tarefas + cobrança **completa (front+back, migration 0008)**; boards revisados. **+ arquivar/excluir transversal** (migration 0009) em Contatos/Projetos/Manutenção/Tarefas.
 3. ~~Fronts das Fases 4, 5 e 6~~ ✅ ADIANTADOS (mock/UI-first) nesta sessão — ver seção "Front-ends ADIANTADOS" acima.
-4. **Backend das Fases 4–6** (em andamento): **Sessão 1 — Financeiro ✅ FEITA** (queries/actions reais, migrations 0011–0013). **PRÓXIMO: Sessão 2 — Estratégia + Profiles** (`docs/PROMPT.md`). Depois Sessão 3 (NCT + Tarefas) e Sessão 4 (Dashboard). Detalhe em `docs/PLANO-BACKEND-FINAL.md`.
+4. **Backend das Fases 4–6** (em andamento): **Sessão 1 — Financeiro ✅** (migrations 0011–0013). **Sessão 2 — Estratégia + Profiles ✅** (queries/validations/action de strategy; profiles via prop). **PRÓXIMO: Sessão 3 — NCT + Tarefas** (`docs/PROMPT.md`). Depois Sessão 4 (Dashboard). Detalhe em `docs/PLANO-BACKEND-FINAL.md`.
 5. Polimento final + `get_advisors` (security/performance).
 
 **Pendência herdada (do sócio dev):** backend de `/implementacao/[id]` (query `getImplementationDetail` + actions de CRUD de tarefas de implementação — o `TasksKanban` já expõe `handlers`).
 
 Detalhe da continuidade em `docs/PROMPT.md` (cola-e-roda) e `docs/PLANO-BACKEND-FINAL.md`.
-Última sessão: **Sessão 1 — Financeiro (backend real)**. Migrations `0011`–`0013` aplicadas, types regenerados, build + 59 testes verdes. Próxima migration livre = `0014`. Ajustes pós-gate do Octavio aplicados (receita = só confirmado; contas abre em Todos; filtro de baixa; taxa de maquininha no projeto; fix do `ON CONFLICT` da manutenção).
+Última sessão: **Sessão 2 — Estratégia + Profiles (backend real)**. Sem migration (seed 0006 reusado). Novos: `lib/queries/strategy.ts`, `lib/validations/strategy.ts`, `lib/actions/strategy.ts`; `STRATEGY_BLOCK_META` + `initialsOf`/`findProfile` migrados para `lib/format.ts`; NCT/Tarefas refatorados p/ receber `profiles` por prop (pages carregam `getProfiles()`). Build + 59 testes verdes. Próxima migration livre = `0014`. Gate validado pelo Octavio (editar bloco persiste; reload mantém; sem criar/excluir).

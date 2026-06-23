@@ -17,7 +17,7 @@ import {
   TASK_AREA_LABELS,
   LEVEL_SCALE_LABELS,
 } from '@/lib/format'
-import { MOCK_PROFILES } from '@/lib/mock/profiles'
+import type { TeamProfile } from '@/lib/queries/config'
 import { PROJECT_LABELS } from '@/lib/mock/tasks'
 import type { ManagedTask } from '@/lib/mock/tasks'
 import type { Commitment } from '@/lib/mock/nct'
@@ -50,6 +50,7 @@ export function TaskBoardDialog({
   task,
   defaultStatus,
   commitments,
+  profiles,
   open,
   onOpenChange,
   onSubmit,
@@ -58,6 +59,7 @@ export function TaskBoardDialog({
   task: ManagedTask | null
   defaultStatus: TaskStatus
   commitments: Commitment[]
+  profiles: TeamProfile[]
   open: boolean
   onOpenChange: (open: boolean) => void
   onSubmit: (task: ManagedTask) => void
@@ -216,7 +218,7 @@ export function TaskBoardDialog({
                 className={selectCls}
               >
                 <option value={NONE}>—</option>
-                {MOCK_PROFILES.map((p) => (
+                {profiles.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
                   </option>

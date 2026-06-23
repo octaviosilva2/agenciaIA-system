@@ -11,8 +11,8 @@ import { ProgressBar, ConfidenceDot } from '@/components/nct/nct-bits'
 import { NarrativeDialog } from '@/components/nct/narrative-dialog'
 import { CommitmentDialog } from '@/components/nct/commitment-dialog'
 import { NctHelpDialog } from '@/components/nct/nct-help-dialog'
-import { COMMITMENT_TYPE, NARRATIVE_STATUS_LABELS } from '@/lib/format'
-import { findProfile } from '@/lib/mock/profiles'
+import { COMMITMENT_TYPE, NARRATIVE_STATUS_LABELS, findProfile } from '@/lib/format'
+import type { TeamProfile } from '@/lib/queries/config'
 import type { Narrative, Commitment } from '@/lib/mock/nct'
 import { cn } from '@/lib/utils'
 
@@ -43,9 +43,11 @@ function avgProgress(commitments: Commitment[]): number {
 export function NctView({
   initialNarratives,
   initialCommitments,
+  profiles,
 }: {
   initialNarratives: Narrative[]
   initialCommitments: Commitment[]
+  profiles: TeamProfile[]
 }) {
   const [narratives, setNarratives] = useState<Narrative[]>(initialNarratives)
   const [commitments, setCommitments] = useState<Commitment[]>(initialCommitments)
@@ -161,6 +163,7 @@ export function NctView({
                 key={narrative.id}
                 narrative={narrative}
                 commitments={its}
+                profiles={profiles}
                 open={isOpen}
                 onToggle={() => toggle(narrative.id)}
                 onEditNarrative={() => openEditNarrative(narrative)}
@@ -174,6 +177,7 @@ export function NctView({
       {/* Dialogs */}
       <NarrativeDialog
         narrative={editingNarrative}
+        profiles={profiles}
         open={narDialogOpen}
         onOpenChange={setNarDialogOpen}
         onSubmit={saveNarrative}
@@ -181,6 +185,7 @@ export function NctView({
       <CommitmentDialog
         commitment={editingCommitment}
         narrativeId={cmNarrativeId}
+        profiles={profiles}
         open={cmDialogOpen}
         onOpenChange={setCmDialogOpen}
         onSubmit={saveCommitment}
@@ -193,6 +198,7 @@ export function NctView({
 function NarrativeBand({
   narrative,
   commitments,
+  profiles,
   open,
   onToggle,
   onEditNarrative,
@@ -200,12 +206,13 @@ function NarrativeBand({
 }: {
   narrative: Narrative
   commitments: Commitment[]
+  profiles: TeamProfile[]
   open: boolean
   onToggle: () => void
   onEditNarrative: () => void
   onAddCommitment: () => void
 }) {
-  const dri = findProfile(narrative.dri_id)
+  const dri = findProfile(profiles, narrative.dri_id)
   const avg = avgProgress(commitments)
 
   return (
@@ -284,7 +291,7 @@ function NarrativeBand({
           ) : (
             <ul className="divide-y divide-border">
               {commitments.map((c) => (
-                <CommitmentRow key={c.id} commitment={c} />
+                <CommitmentRow key={c.id} commitment={c} profiles={profiles} />
               ))}
             </ul>
           )}
@@ -295,8 +302,14 @@ function NarrativeBand({
 }
 
 /** Linha de um compromisso dentro da narrativa expandida. */
-function CommitmentRow({ commitment: c }: { commitment: Commitment }) {
-  const dri = findProfile(c.dri_id)
+function CommitmentRow({
+  commitment: c,
+  profiles,
+}: {
+  commitment: Commitment
+  profiles: TeamProfile[]
+}) {
+  const dri = findProfile(profiles, c.dri_id)
   return (
     <li className="flex items-center gap-3 py-2.5">
       {/* Badge do tipo (índigo/âmbar/verde/slate via format.ts) */}

@@ -12,7 +12,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { narrativeSchema } from '@/lib/validations/nct'
 import { NARRATIVE_STATUS_LABELS } from '@/lib/format'
-import { MOCK_PROFILES } from '@/lib/mock/profiles'
+import type { TeamProfile } from '@/lib/queries/config'
 import type { Narrative } from '@/lib/mock/nct'
 import type { Database } from '@/lib/supabase/types'
 
@@ -38,11 +38,13 @@ const NONE = 'none'
  */
 export function NarrativeDialog({
   narrative,
+  profiles,
   open,
   onOpenChange,
   onSubmit,
 }: {
   narrative: Narrative | null
+  profiles: TeamProfile[]
   open: boolean
   onOpenChange: (open: boolean) => void
   onSubmit: (narrative: Narrative) => void
@@ -137,7 +139,7 @@ export function NarrativeDialog({
                 className={selectCls}
               >
                 <option value={NONE}>—</option>
-                {MOCK_PROFILES.map((p) => (
+                {profiles.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
                   </option>
