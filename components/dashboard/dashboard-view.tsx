@@ -12,26 +12,13 @@ import { cn } from '@/lib/utils'
 import { EntityBadge } from '@/components/ui/entity-badge'
 import { DEAL_STAGE, formatCurrency } from '@/lib/format'
 import type {
+  FinanceSummary,
   CommercialSummary,
   ImplementationSummary,
+  NctSummary,
   GrowthPoint,
-} from '@/lib/mock/dashboard'
+} from '@/lib/queries/dashboard'
 import { GrowthChart } from '@/components/dashboard/growth-chart'
-
-/** Resumo financeiro do mês corrente. */
-type FinanceSummary = {
-  revenue: number  // receita (cobranças não canceladas com vencimento no mês)
-  expenses: number // despesas (contas a pagar no mês)
-  profit: number   // receita − despesas
-}
-
-/** Resumo NCT derivado dos compromissos/narrativas. */
-type NctSummary = {
-  atRisk: number
-  avgProgress: number
-  activeNarratives: number
-  staleCommitmentsCount: number
-}
 
 /**
  * Casca de um bloco do Dashboard: título com ícone + link para o módulo.

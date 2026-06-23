@@ -12,7 +12,7 @@ import {
 import { TrendingUp, TrendingDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/format'
-import type { GrowthPoint } from '@/lib/mock/dashboard'
+import type { GrowthPoint } from '@/lib/queries/dashboard'
 
 type Metric = 'revenue' | 'clients'
 
