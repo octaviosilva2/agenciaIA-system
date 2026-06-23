@@ -163,12 +163,22 @@ export default async function ContatoProfilePage({
             ) : (
               <ul className="space-y-3">
                 {profile.diagnostics.map((d) => (
-                  <li key={d.id} className="rounded-md border border-border p-3 text-sm">
-                    <p className="mb-1 text-xs text-muted-foreground">{formatDate(d.createdAt)}</p>
-                    {d.context && <p><span className="font-medium">Contexto:</span> {d.context}</p>}
-                    {d.problems && <p><span className="font-medium">Dores:</span> {d.problems}</p>}
-                    {d.opportunities && <p><span className="font-medium">Oportunidades:</span> {d.opportunities}</p>}
-                    {d.proposedSolution && <p><span className="font-medium">Solução:</span> {d.proposedSolution}</p>}
+                  <li
+                    key={d.id}
+                    className="rounded-md border border-border p-3 text-sm break-words [overflow-wrap:anywhere]"
+                  >
+                    <p className="mb-1.5 text-xs text-muted-foreground">{formatDate(d.createdAt)}</p>
+                    {d.notes ? (
+                      <p className="whitespace-pre-wrap">{d.notes}</p>
+                    ) : (
+                      // Fallback para diagnósticos antigos (campos separados).
+                      <div className="space-y-1">
+                        {d.context && <p><span className="font-medium">Contexto:</span> {d.context}</p>}
+                        {d.problems && <p><span className="font-medium">Dores:</span> {d.problems}</p>}
+                        {d.opportunities && <p><span className="font-medium">Oportunidades:</span> {d.opportunities}</p>}
+                        {d.proposedSolution && <p><span className="font-medium">Solução:</span> {d.proposedSolution}</p>}
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -184,19 +194,22 @@ export default async function ContatoProfilePage({
             ) : (
               <ul className="space-y-2.5">
                 {profile.activities.map((a) => (
-                  <li key={a.id} className="flex gap-3 text-sm">
-                    <span className="mt-0.5 shrink-0">
+                  <li
+                    key={a.id}
+                    className="rounded-md border border-border p-3 text-sm break-words [overflow-wrap:anywhere]"
+                  >
+                    <div className="mb-1.5 flex items-center justify-between gap-2">
                       <EntityBadge
                         meta={{
                           label: ACTIVITY_TYPE_LABELS[a.type as keyof typeof ACTIVITY_TYPE_LABELS] ?? a.type,
                           className: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-500/15 dark:text-zinc-300',
                         }}
                       />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="whitespace-pre-wrap">{a.content}</p>
-                      <p className="text-xs text-muted-foreground">{formatDateTime(a.occurredAt)}</p>
+                      <span className="shrink-0 text-xs text-muted-foreground">
+                        {formatDateTime(a.occurredAt)}
+                      </span>
                     </div>
+                    <p className="whitespace-pre-wrap">{a.content}</p>
                   </li>
                 ))}
               </ul>

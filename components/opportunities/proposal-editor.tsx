@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { ExternalLink, Pencil } from 'lucide-react'
+import { Pencil } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { updateProposal } from '@/lib/actions/project'
 import { formatCurrency } from '@/lib/format'
@@ -34,12 +34,10 @@ export function ProposalEditor({
   const [busy, setBusy] = useState(false)
   // Campos do form (string para casar com inputs nativos).
   const [value, setValue] = useState(totalValue != null ? String(totalValue) : '')
-  const [url, setUrl] = useState(driveUrl ?? '')
   const [note, setNote] = useState(notes ?? '')
 
   function cancel() {
     setValue(totalValue != null ? String(totalValue) : '')
-    setUrl(driveUrl ?? '')
     setNote(notes ?? '')
     setEditing(false)
   }
@@ -49,7 +47,8 @@ export function ProposalEditor({
     const parsed = value.trim() === '' ? null : Number(value)
     const res = await updateProposal(projectId, dealId, {
       totalValue: parsed != null && Number.isFinite(parsed) ? parsed : null,
-      driveUrl: url.trim() === '' ? null : url.trim(),
+      // Campo removido da UI — preserva o valor já existente no banco.
+      driveUrl,
       notes: note.trim() === '' ? null : note.trim(),
     })
     setBusy(false)
@@ -70,23 +69,6 @@ export function ProposalEditor({
               <dt className="text-muted-foreground">Valor</dt>
               <dd className="font-mono tabular-nums">
                 {totalValue != null ? formatCurrency(totalValue) : '—'}
-              </dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-muted-foreground">Arquivo</dt>
-              <dd>
-                {driveUrl ? (
-                  <a
-                    href={driveUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 font-medium hover:underline"
-                  >
-                    Abrir <ExternalLink className="h-3.5 w-3.5" />
-                  </a>
-                ) : (
-                  <span className="text-muted-foreground">—</span>
-                )}
               </dd>
             </div>
             {notes && (
@@ -125,19 +107,6 @@ export function ProposalEditor({
           value={value}
           onChange={(e) => setValue(e.target.value)}
           placeholder="0,00"
-          className={inputCls}
-        />
-      </div>
-      <div>
-        <label className={labelCls} htmlFor="proposal_url">
-          Link do arquivo (proposta)
-        </label>
-        <input
-          id="proposal_url"
-          type="url"
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          placeholder="https://drive.google.com/…"
           className={inputCls}
         />
       </div>

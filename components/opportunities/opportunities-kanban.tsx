@@ -104,7 +104,12 @@ function Column({
           ))
         ) : (
           items.map((it) => (
-            <DraggableOpportunityCard key={it.id} item={it} menu={renderMenu(it)} />
+            <DraggableOpportunityCard
+              key={it.id}
+              item={it}
+              onOpen={onOpen ? () => onOpen(it) : undefined}
+              menu={renderMenu(it)}
+            />
           ))
         )}
       </div>
@@ -287,6 +292,7 @@ export function OpportunitiesKanban({
               stage={stage}
               items={deals.filter((d) => d.stage === stage)}
               renderMenu={renderMenu}
+              onOpen={(it) => router.push(`/projetos/${it.id}`)}
             />
           ))}
 

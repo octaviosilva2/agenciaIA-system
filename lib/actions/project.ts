@@ -34,6 +34,30 @@ export async function updateScopeItems(
   return { success: true, message: 'Escopo atualizado.' }
 }
 
+/**
+ * Renomeia o projeto a partir da própria tela (kebab "Editar" do header).
+ * Quando há projeto vinculado, grava em `projects.name`; senão, no `deals.title`
+ * (a tela exibe `projects.name ?? deals.title`).
+ */
+export async function renameProject(
+  dealId: string,
+  projectId: string | null,
+  name: string,
+): Promise<ActionState> {
+  const trimmed = name.trim()
+  if (!trimmed) return { success: false, message: 'Informe o nome do projeto.' }
+
+  const supabase = await createClient()
+  const { error } = projectId
+    ? await supabase.from('projects').update({ name: trimmed }).eq('id', projectId)
+    : await supabase.from('deals').update({ title: trimmed }).eq('id', dealId)
+  if (error) return { success: false, message: `Erro ao renomear: ${error.message}` }
+
+  revalidatePath(`/projetos/${dealId}`)
+  revalidatePath('/projetos')
+  return { success: true, message: 'Projeto renomeado.' }
+}
+
 /** Atualiza dados da proposta (valor do projeto, link de arquivo, notas). */
 export async function updateProposal(
   projectId: string,

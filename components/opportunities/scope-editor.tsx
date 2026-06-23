@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { CheckCircle2, Circle, CircleDot, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -103,37 +104,61 @@ export function ScopeEditor({
   dealId: string
   initialItems: ScopeItem[]
 }) {
+  const router = useRouter()
   const [items, setItems] = useState<ScopeItem[]>(initialItems)
   const [newTitle, setNewTitle] = useState('')
   const [newDesc, setNewDesc] = useState('')
   const [busy, setBusy] = useState(false)
   const [descDialog, setDescDialog] = useState<ScopeItem | null>(null)
 
+  /**
+   * Auto-save: persiste o escopo a cada mudança (add/avançar/remover) — espelha
+   * implementation-detail.tsx. Sucesso é silencioso (+ refresh p/ sincronizar a tela);
+   * o botão "Salvar escopo" segue como reforço.
+   */
+  async function persist(nextItems: ScopeItem[]) {
+    setBusy(true)
+    const res = await updateScopeItems(projectId, dealId, nextItems)
+    setBusy(false)
+    if (res.success) router.refresh()
+    else toast.error(res.message)
+  }
+
   function advance(id: string) {
-    setItems((p) => p.map((x) => (x.id === id ? { ...x, status: nextScopeStatus(x.status) } : x)))
+    const next = items.map((x) => (x.id === id ? { ...x, status: nextScopeStatus(x.status) } : x))
+    setItems(next)
+    void persist(next)
   }
 
   function remove(id: string) {
-    setItems((p) => p.filter((x) => x.id !== id))
+    const next = items.filter((x) => x.id !== id)
+    setItems(next)
+    void persist(next)
   }
 
   function addItem() {
     const t = newTitle.trim()
     if (!t) return
-    setItems((p) => [
-      ...p,
+    const next: ScopeItem[] = [
+      ...items,
       { id: crypto.randomUUID(), title: t, description: newDesc.trim(), status: 'pendente' },
-    ])
+    ]
+    setItems(next)
     setNewTitle('')
     setNewDesc('')
+    void persist(next)
   }
 
   async function save() {
     setBusy(true)
     const res = await updateScopeItems(projectId, dealId, items)
     setBusy(false)
-    if (res.success) toast.success(res.message)
-    else toast.error(res.message)
+    if (res.success) {
+      toast.success(res.message)
+      router.refresh()
+    } else {
+      toast.error(res.message)
+    }
   }
 
   return (

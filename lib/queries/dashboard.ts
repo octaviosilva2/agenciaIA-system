@@ -239,7 +239,24 @@ async function getNctSummary(): Promise<NctSummary> {
       const current = latestDaysAgo.get(ck.commitment_id)
       if (current === undefined || daysAgo < current) latestDaysAgo.set(ck.commitment_id, daysAgo)
     }
+
+    // Idade de cada compromisso (created_at) — um compromisso recém-criado não
+    // pode contar como "sem check-in há +14 dias".
+    const { data: commitmentRows, error: cmErr } = await supabase
+      .from('commitments')
+      .select('id, created_at')
+    if (cmErr) throw new Error(cmErr.message)
+
+    const createdDaysAgo = new Map<string, number>()
+    for (const cm of (commitmentRows ?? []) as { id: string; created_at: string }[]) {
+      const daysAgo = Math.floor((Date.now() - new Date(cm.created_at).getTime()) / 86_400_000)
+      createdDaysAgo.set(cm.id, daysAgo)
+    }
+
+    // Stale só se o compromisso já tem +14 dias de vida E (sem check-in OU último check-in há +14 dias).
     const staleCommitmentsCount = activeCommitments.filter((c) => {
+      const age = createdDaysAgo.get(c.id)
+      if (age === undefined || age <= STALE_DAYS) return false
       const last = latestDaysAgo.get(c.id)
       return last === undefined || last > STALE_DAYS
     }).length

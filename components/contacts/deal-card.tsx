@@ -1,6 +1,7 @@
 'use client'
 
 import { useDraggable } from '@dnd-kit/core'
+import { useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/format'
 import { type DealStage } from '@/lib/rules/deal-stage'
@@ -44,6 +45,7 @@ export function DealCardContent({
   /** Menu de ações (⋯) no canto superior direito — montado pelo board. */
   menu?: React.ReactNode
 }) {
+  const router = useRouter()
   const isTerminal = TERMINAL_CARD_STAGES.includes(deal.stage)
   // No fechado, a manutenção é só descrição (não badge separado).
   const outcomeNote =
@@ -60,7 +62,17 @@ export function DealCardContent({
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium">{deal.company}</p>
+          {/* Nome clicável → perfil do contato. stopPropagation no pointer evita conflito com o drag. */}
+          <p
+            className="cursor-pointer truncate text-sm font-medium hover:underline"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation()
+              router.push(`/contatos/${deal.companyId}`)
+            }}
+          >
+            {deal.company}
+          </p>
           <p className="truncate text-xs text-muted-foreground">{deal.title}</p>
         </div>
         {menu}

@@ -55,20 +55,15 @@ export function DiagnosticForm({ companyId }: { companyId: string }) {
         <form ref={formRef} action={formAction} className="space-y-3">
           <input type="hidden" name="company_id" value={companyId} />
           <div>
-            <label className={labelCls} htmlFor="context">Contexto (situação atual)</label>
-            <textarea id="context" name="context" rows={2} className={textareaCls} />
-          </div>
-          <div>
-            <label className={labelCls} htmlFor="problems">Dores identificadas</label>
-            <textarea id="problems" name="problems" rows={2} className={textareaCls} />
-          </div>
-          <div>
-            <label className={labelCls} htmlFor="opportunities">Oportunidades de IA/automação</label>
-            <textarea id="opportunities" name="opportunities" rows={2} className={textareaCls} />
-          </div>
-          <div>
-            <label className={labelCls} htmlFor="proposed_solution">Solução proposta</label>
-            <textarea id="proposed_solution" name="proposed_solution" rows={2} className={textareaCls} />
+            <label className={labelCls} htmlFor="notes">Diagnóstico</label>
+            <textarea
+              id="notes"
+              name="notes"
+              rows={6}
+              required
+              placeholder="Contexto, dores, oportunidades de IA/automação e solução proposta…"
+              className={textareaCls}
+            />
           </div>
           <DialogFooter>
             <DialogClose render={<Button type="button" variant="outline">Cancelar</Button>} />

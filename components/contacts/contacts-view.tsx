@@ -112,15 +112,18 @@ export function ContactsView({
 
       {/* Barra de filtros + alternância de visão */}
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-[200px] flex-1">
-          <Search className="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por nome, segmento, cidade…"
-            className="h-9 w-full rounded-md border border-border bg-card pl-8 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-          />
-        </div>
+        {/* Busca: só na visão Lista (no kanban, escondida). */}
+        {view === 'lista' && (
+          <div className="relative min-w-[200px] flex-1">
+            <Search className="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar por nome, segmento, cidade…"
+              className="h-9 w-full rounded-md border border-border bg-card pl-8 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+            />
+          </div>
+        )}
 
         {!archived && (
           <select
@@ -140,19 +143,21 @@ export function ContactsView({
 
         <PeriodFilter />
 
-        {/* Toggle Ativos / Arquivados */}
-        <div className="ml-auto inline-flex items-center rounded-md border border-border bg-card p-0.5">
-          <button type="button" onClick={() => setArchived(false)} aria-pressed={!archived} className={segCls(!archived)}>
-            Ativos
-          </button>
-          <button type="button" onClick={() => setArchived(true)} aria-pressed={archived} className={segCls(archived)}>
-            Arquivados
-          </button>
-        </div>
+        {/* Toggle Ativos / Arquivados — só na visão Lista (no kanban, escondido). */}
+        {view === 'lista' && (
+          <div className="ml-auto inline-flex items-center rounded-md border border-border bg-card p-0.5">
+            <button type="button" onClick={() => setArchived(false)} aria-pressed={!archived} className={segCls(!archived)}>
+              Ativos
+            </button>
+            <button type="button" onClick={() => setArchived(true)} aria-pressed={archived} className={segCls(archived)}>
+              Arquivados
+            </button>
+          </div>
+        )}
 
         {/* Toggle Lista / Kanban (só na visão ativa) */}
         {!archived && (
-          <div className="inline-flex items-center rounded-md border border-border bg-card p-0.5">
+          <div className="ml-auto inline-flex items-center rounded-md border border-border bg-card p-0.5">
             <button type="button" onClick={() => setView('lista')} aria-pressed={view === 'lista'} className={segCls(view === 'lista')}>
               <List className="h-4 w-4" />
               Lista
@@ -166,7 +171,7 @@ export function ContactsView({
       </div>
 
       {view === 'kanban' ? (
-        <ContactsKanban deals={deals} />
+        <ContactsKanban deals={deals} stageFilter={stage} />
       ) : rows.length === 0 ? (
         <div className="grid place-items-center rounded-lg border border-dashed border-border bg-card p-10 text-center">
           <Inbox className="h-6 w-6 text-muted-foreground/50" />

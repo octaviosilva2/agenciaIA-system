@@ -94,6 +94,7 @@ export default async function ProjetoDetailPage({
             </p>
             <ProjectHeaderActions
               dealId={detail.dealId}
+              projectId={detail.projectId}
               projectName={detail.project}
               archived={detail.archived}
             />

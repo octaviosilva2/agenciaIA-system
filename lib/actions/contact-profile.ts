@@ -55,12 +55,9 @@ export async function createDiagnostic(
   formData: FormData,
 ): Promise<ActionState> {
   const companyId = str(formData.get('company_id'))
+  // Diagnóstico agora é um único campo de texto, gravado em diagnostics.notes.
   const raw = {
     company_id: companyId,
-    context: str(formData.get('context')),
-    problems: str(formData.get('problems')),
-    opportunities: str(formData.get('opportunities')),
-    proposed_solution: str(formData.get('proposed_solution')),
     notes: str(formData.get('notes')),
   }
 

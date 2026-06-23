@@ -171,15 +171,18 @@ export function ProjectsView({
 
       {/* Filtros + alternância de visão */}
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-[200px] flex-1">
-          <Search className="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por projeto ou contato…"
-            className="h-9 w-full rounded-md border border-border bg-card pl-8 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-          />
-        </div>
+        {/* Busca: só na visão Lista (no kanban, escondida). */}
+        {view === 'lista' && (
+          <div className="relative min-w-[200px] flex-1">
+            <Search className="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar por projeto ou contato…"
+              className="h-9 w-full rounded-md border border-border bg-card pl-8 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+            />
+          </div>
+        )}
 
         {phase === 'venda' && !archived && (
           <select
@@ -199,8 +202,8 @@ export function ProjectsView({
 
         <PeriodFilter />
 
-        {/* Venda: toggle Ativos / Arquivados (lixeira) */}
-        {phase === 'venda' && (
+        {/* Venda: toggle Ativos / Arquivados (lixeira) — só na visão Lista. */}
+        {phase === 'venda' && view === 'lista' && (
           <div className="ml-auto inline-flex items-center rounded-md border border-border bg-card p-0.5">
             <button type="button" onClick={() => setArchived(false)} aria-pressed={!archived} className={segCls(!archived)}>
               Ativos
@@ -227,7 +230,7 @@ export function ProjectsView({
         )}
 
         {showViewToggle && (
-          <div className="inline-flex items-center rounded-md border border-border bg-card p-0.5">
+          <div className="ml-auto inline-flex items-center rounded-md border border-border bg-card p-0.5">
             <button type="button" onClick={() => setView('lista')} aria-pressed={view === 'lista'} className={segCls(view === 'lista')}>
               <List className="h-4 w-4" />
               Lista

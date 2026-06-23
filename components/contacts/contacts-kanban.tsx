@@ -110,12 +110,23 @@ function Column({
   )
 }
 
-export function ContactsKanban({ deals: dealsProp }: { deals: KanbanDeal[] }) {
+export function ContactsKanban({
+  deals: dealsProp,
+  stageFilter = 'all',
+}: {
+  deals: KanbanDeal[]
+  /** Estágio selecionado no filtro da tela; 'all' mostra todas as colunas cheias. */
+  stageFilter?: DealStage | 'all'
+}) {
   const [deals, setDeals] = useState<KanbanDeal[]>(dealsProp)
   const [activeId, setActiveId] = useState<string | null>(null)
 
   // Sincroniza com o servidor após cada revalidação.
   useEffect(() => setDeals(dealsProp), [dealsProp])
+
+  // Filtro de estágio: quando ativo, só os cards do estágio escolhido aparecem
+  // (o drag continua operando sobre o conjunto completo `deals`).
+  const visibleDeals = stageFilter === 'all' ? deals : deals.filter((d) => d.stage === stageFilter)
 
   // Modal: criar projeto ao mover para Oportunidade
   const [pendingMove, setPendingMove] = useState<KanbanDeal | null>(null)
@@ -299,7 +310,7 @@ export function ContactsKanban({ deals: dealsProp }: { deals: KanbanDeal[] }) {
               key={stage}
               stage={stage}
               terminal
-              deals={deals.filter((d) => d.stage === stage)}
+              deals={visibleDeals.filter((d) => d.stage === stage)}
               renderMenu={renderMenu}
             />
           ))}
@@ -310,7 +321,7 @@ export function ContactsKanban({ deals: dealsProp }: { deals: KanbanDeal[] }) {
             <Column
               key={stage}
               stage={stage}
-              deals={deals.filter((d) => d.stage === stage)}
+              deals={visibleDeals.filter((d) => d.stage === stage)}
               renderMenu={renderMenu}
             />
           ))}
@@ -323,7 +334,7 @@ export function ContactsKanban({ deals: dealsProp }: { deals: KanbanDeal[] }) {
               key={stage}
               stage={stage}
               terminal
-              deals={deals.filter((d) => d.stage === stage)}
+              deals={visibleDeals.filter((d) => d.stage === stage)}
               renderMenu={renderMenu}
             />
           ))}

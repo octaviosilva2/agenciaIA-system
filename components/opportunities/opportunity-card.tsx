@@ -75,9 +75,12 @@ export function OpportunityCardContent({
 /** Card arrastável (dnd-kit). */
 export function DraggableOpportunityCard({
   item,
+  onOpen,
   menu,
 }: {
   item: OpportunityItem
+  /** Quando presente, o corpo do card abre o projeto (clique sem arrasto). */
+  onOpen?: () => void
   menu?: React.ReactNode
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: item.id })
@@ -89,7 +92,7 @@ export function DraggableOpportunityCard({
       {...listeners}
       className="touch-none cursor-grab active:cursor-grabbing"
     >
-      <OpportunityCardContent item={item} dragging={isDragging} menu={menu} />
+      <OpportunityCardContent item={item} dragging={isDragging} onOpen={onOpen} menu={menu} />
     </div>
   )
 }

@@ -72,6 +72,7 @@ export function MaintenanceEditor({
   const [hourlyRate, setHourlyRate] = useState('')
   const [chargeOpen, setChargeOpen] = useState(false)
   const [open, setOpen] = useState(false)
+  const [showAllCharges, setShowAllCharges] = useState(false)
   const [busy, setBusy] = useState(false)
 
   const isAvulso = contract?.kind === 'avulso'
@@ -386,6 +387,13 @@ export function MaintenanceEditor({
   }
 
   // --- Leitura: contrato mensal ---
+  // Parcelas recorrentes: por padrão só as 2 próximas pendentes; "Ver mais" expande tudo.
+  const pendingCharges = [...charges]
+    .filter((c) => c.status === 'pendente')
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+  const visibleCharges = showAllCharges ? charges : pendingCharges.slice(0, 2)
+  const hiddenCharges = charges.length - visibleCharges.length
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
@@ -399,25 +407,41 @@ export function MaintenanceEditor({
         <ContractStatusMenu contractId={contract.id} status={contract.status} />
       </div>
 
-      {/* Parcelas recorrentes geradas */}
+      {/* Parcelas recorrentes geradas (só as próximas 2 pendentes por padrão) */}
       {charges.length > 0 && (
-        <ul className="divide-y divide-border">
-          {charges.map((c) => {
-            const overdue = c.status === 'pendente' && isOverdue(c.dueDate)
-            return (
-              <li key={c.id} className="flex items-center justify-between gap-2 py-2 text-sm">
-                <div className="min-w-0">
-                  <p className="truncate font-medium">{c.description}</p>
-                  <p className="text-xs text-muted-foreground">Vence {formatDate(c.dueDate)}</p>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <span className="font-mono text-sm tabular-nums">{formatCurrency(c.amount)}</span>
-                  <EntityBadge meta={overdue ? CHARGE_OVERDUE : CHARGE_STATUS[c.status]} />
-                </div>
-              </li>
-            )
-          })}
-        </ul>
+        <div className="space-y-2">
+          {visibleCharges.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nenhuma parcela pendente.</p>
+          ) : (
+            <ul className="divide-y divide-border">
+              {visibleCharges.map((c) => {
+                const overdue = c.status === 'pendente' && isOverdue(c.dueDate)
+                return (
+                  <li key={c.id} className="flex items-center justify-between gap-2 py-2 text-sm">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium">{c.description}</p>
+                      <p className="text-xs text-muted-foreground">Vence {formatDate(c.dueDate)}</p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <span className="font-mono text-sm tabular-nums">{formatCurrency(c.amount)}</span>
+                      <EntityBadge meta={overdue ? CHARGE_OVERDUE : CHARGE_STATUS[c.status]} />
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+          {(hiddenCharges > 0 || showAllCharges) && (
+            <button
+              type="button"
+              onClick={() => setShowAllCharges((v) => !v)}
+              className="cursor-pointer text-xs font-medium text-muted-foreground hover:text-foreground"
+              aria-expanded={showAllCharges}
+            >
+              {showAllCharges ? 'Ver menos' : `Ver mais (${hiddenCharges})`}
+            </button>
+          )}
+        </div>
       )}
 
       <button

@@ -5,7 +5,6 @@ import { ProfileSection } from '@/components/config/profile-section'
 import { SecuritySection } from '@/components/config/security-section'
 import { AppearanceSection } from '@/components/config/appearance-section'
 import { FinancialSection } from '@/components/config/financial-section'
-import { CrmSection } from '@/components/config/crm-section'
 import { TeamSection } from '@/components/config/team-section'
 import type { OwnProfile, OrgSettingsRow, TeamProfile } from '@/lib/queries/config'
 
@@ -58,9 +57,6 @@ export function ConfigLayout({
           <TabsTrigger value="financeiro" className="cursor-pointer">
             Financeiro
           </TabsTrigger>
-          <TabsTrigger value="crm" className="cursor-pointer">
-            CRM
-          </TabsTrigger>
           <TabsTrigger value="equipe" className="cursor-pointer">
             Equipe
           </TabsTrigger>
@@ -79,9 +75,6 @@ export function ConfigLayout({
           </TabsContent>
           <TabsContent value="financeiro">
             <FinancialSection orgSettings={orgSettings} />
-          </TabsContent>
-          <TabsContent value="crm">
-            <CrmSection orgSettings={orgSettings} />
           </TabsContent>
           <TabsContent value="equipe">
             <TeamSection profiles={profiles} currentUserId={currentUserId} />
