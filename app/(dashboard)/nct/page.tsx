@@ -1,18 +1,25 @@
 import { NctView } from '@/components/nct/nct-view'
 import { getProfiles } from '@/lib/queries/config'
-import { MOCK_NARRATIVES, MOCK_COMMITMENTS } from '@/lib/mock/nct'
+import { getNarrativesWithCommitments } from '@/lib/queries/nct'
 
 /**
  * Página NCT (Fase 5 — Gestão).
- * Server Component: carrega a equipe real (getProfiles) para os selects de DRI.
- * Narrativas/compromissos ainda são mock (religados na Sessão 3).
+ * Server Component: carrega narrativas + compromissos reais e a equipe (getProfiles)
+ * para os selects de DRI. Achata a lista aninhada nos dois arrays que a view consome.
  */
 export default async function NCTPage() {
-  const profiles = await getProfiles()
+  const [narrativesWith, profiles] = await Promise.all([
+    getNarrativesWithCommitments(),
+    getProfiles(),
+  ])
+
+  const narratives = narrativesWith.map(({ commitments: _omit, ...n }) => n)
+  const commitments = narrativesWith.flatMap((n) => n.commitments)
+
   return (
     <NctView
-      initialNarratives={MOCK_NARRATIVES}
-      initialCommitments={MOCK_COMMITMENTS}
+      initialNarratives={narratives}
+      initialCommitments={commitments}
       profiles={profiles}
     />
   )

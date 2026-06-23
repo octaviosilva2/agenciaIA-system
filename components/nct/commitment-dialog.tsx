@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button'
 import { commitmentSchema } from '@/lib/validations/nct'
 import { COMMITMENT_TYPE, CONFIDENCE_LABELS } from '@/lib/format'
 import type { TeamProfile } from '@/lib/queries/config'
-import type { Commitment } from '@/lib/mock/nct'
+import type { Commitment } from '@/lib/queries/nct'
 import type { Database } from '@/lib/supabase/types'
 
 type CommitmentType = Database['public']['Enums']['commitment_type']

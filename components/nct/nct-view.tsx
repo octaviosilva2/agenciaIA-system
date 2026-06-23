@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { ChevronRight, Plus, Target, ArrowUpRight } from 'lucide-react'
@@ -12,8 +12,14 @@ import { NarrativeDialog } from '@/components/nct/narrative-dialog'
 import { CommitmentDialog } from '@/components/nct/commitment-dialog'
 import { NctHelpDialog } from '@/components/nct/nct-help-dialog'
 import { COMMITMENT_TYPE, NARRATIVE_STATUS_LABELS, findProfile } from '@/lib/format'
+import {
+  createNarrative,
+  updateNarrative,
+  createCommitment,
+  updateCommitment,
+} from '@/lib/actions/nct'
 import type { TeamProfile } from '@/lib/queries/config'
-import type { Narrative, Commitment } from '@/lib/mock/nct'
+import type { Narrative, Commitment } from '@/lib/queries/nct'
 import { cn } from '@/lib/utils'
 
 /** Card de métrica (mesmo molde do StatCard do funil/financeiro). */
@@ -51,6 +57,12 @@ export function NctView({
 }) {
   const [narratives, setNarratives] = useState<Narrative[]>(initialNarratives)
   const [commitments, setCommitments] = useState<Commitment[]>(initialCommitments)
+  const [, startTransition] = useTransition()
+
+  // Resync com o servidor após revalidação (nova prop = dados frescos do banco).
+  useEffect(() => setNarratives(initialNarratives), [initialNarratives])
+  useEffect(() => setCommitments(initialCommitments), [initialCommitments])
+
   // Faixas expandidas (estado local — clique abre/fecha inline).
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set([initialNarratives[0]?.id]))
 
@@ -88,13 +100,24 @@ export function NctView({
     setNarDialogOpen(true)
   }
   function saveNarrative(n: Narrative) {
-    setNarratives((prev) => {
-      const exists = prev.some((x) => x.id === n.id)
-      return exists ? prev.map((x) => (x.id === n.id ? n : x)) : [...prev, n]
+    const input = { title: n.title, purpose: n.purpose, dri_id: n.dri_id, status: n.status }
+    startTransition(async () => {
+      if (editingNarrative) {
+        const res = await updateNarrative(n.id, input)
+        if (!res.success) return void toast.error(res.message)
+        setNarratives((prev) => prev.map((x) => (x.id === n.id ? n : x)))
+        setNarDialogOpen(false)
+        toast.success('Narrativa atualizada.')
+      } else {
+        const res = await createNarrative(input)
+        if (!res.success || !res.narrative) return void toast.error(res.message)
+        const created = res.narrative
+        setNarratives((prev) => [...prev, created])
+        setExpanded((prev) => new Set(prev).add(created.id))
+        setNarDialogOpen(false)
+        toast.success('Narrativa criada.')
+      }
     })
-    setExpanded((prev) => new Set(prev).add(n.id))
-    setNarDialogOpen(false)
-    toast.success(editingNarrative ? 'Narrativa atualizada.' : 'Narrativa criada.')
   }
 
   function openNewCommitment(narrativeId: string) {
@@ -103,13 +126,35 @@ export function NctView({
     setCmDialogOpen(true)
   }
   function saveCommitment(c: Commitment) {
-    setCommitments((prev) => {
-      const exists = prev.some((x) => x.id === c.id)
-      return exists ? prev.map((x) => (x.id === c.id ? c : x)) : [...prev, c]
+    const input = {
+      narrative_id: c.narrative_id,
+      title: c.title,
+      description: c.description,
+      type: c.type,
+      status: c.status,
+      progress: c.progress,
+      confidence: c.confidence,
+      dri_id: c.dri_id,
+      metric_target: c.metric_target,
+    }
+    startTransition(async () => {
+      if (editingCommitment) {
+        const res = await updateCommitment(c.id, input)
+        if (!res.success) return void toast.error(res.message)
+        setCommitments((prev) => prev.map((x) => (x.id === c.id ? c : x)))
+        setExpanded((prev) => new Set(prev).add(c.narrative_id))
+        setCmDialogOpen(false)
+        toast.success('Compromisso atualizado.')
+      } else {
+        const res = await createCommitment(input)
+        if (!res.success || !res.commitment) return void toast.error(res.message)
+        const created = res.commitment
+        setCommitments((prev) => [...prev, created])
+        setExpanded((prev) => new Set(prev).add(created.narrative_id))
+        setCmDialogOpen(false)
+        toast.success('Compromisso criado.')
+      }
     })
-    setExpanded((prev) => new Set(prev).add(c.narrative_id))
-    setCmDialogOpen(false)
-    toast.success(editingCommitment ? 'Compromisso atualizado.' : 'Compromisso criado.')
   }
 
   return (

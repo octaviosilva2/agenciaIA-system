@@ -18,9 +18,8 @@ import {
   LEVEL_SCALE_LABELS,
 } from '@/lib/format'
 import type { TeamProfile } from '@/lib/queries/config'
-import { PROJECT_LABELS } from '@/lib/mock/tasks'
-import type { ManagedTask } from '@/lib/mock/tasks'
-import type { Commitment } from '@/lib/mock/nct'
+import type { ManagedTask } from '@/lib/queries/tasks'
+import type { Commitment } from '@/lib/queries/nct'
 import type { Database } from '@/lib/supabase/types'
 
 type TaskStatus = Database['public']['Enums']['task_status']
@@ -50,6 +49,7 @@ export function TaskBoardDialog({
   task,
   defaultStatus,
   commitments,
+  projectLabels,
   profiles,
   open,
   onOpenChange,
@@ -59,6 +59,7 @@ export function TaskBoardDialog({
   task: ManagedTask | null
   defaultStatus: TaskStatus
   commitments: Commitment[]
+  projectLabels: Record<string, string>
   profiles: TeamProfile[]
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -275,7 +276,7 @@ export function TaskBoardDialog({
                 className={selectCls}
               >
                 <option value={NONE}>—</option>
-                {Object.entries(PROJECT_LABELS).map(([id, label]) => (
+                {Object.entries(projectLabels).map(([id, label]) => (
                   <option key={id} value={id}>
                     {label}
                   </option>

@@ -1,20 +1,30 @@
 import { TasksBoard } from '@/components/tasks/tasks-board'
 import { getProfiles } from '@/lib/queries/config'
-import { MOCK_TASKS } from '@/lib/mock/tasks'
-import { MOCK_COMMITMENTS, MOCK_NARRATIVES } from '@/lib/mock/nct'
+import { getManagedTasks, getProjectLabels } from '@/lib/queries/tasks'
+import { getNarrativesWithCommitments } from '@/lib/queries/nct'
 
 /**
  * Board global de Tarefas (Fase 5 — Gestão).
- * Server Component: carrega a equipe real (getProfiles) para o select de
- * responsável. Tarefas/compromissos ainda são mock (religados na Sessão 3).
+ * Server Component: carrega tarefas reais, rótulos de projeto, narrativas/
+ * compromissos (filtro "por compromisso") e a equipe (select de responsável).
  */
 export default async function TarefasPage() {
-  const profiles = await getProfiles()
+  const [tasks, projectLabels, narrativesWith, profiles] = await Promise.all([
+    getManagedTasks(),
+    getProjectLabels(),
+    getNarrativesWithCommitments(),
+    getProfiles(),
+  ])
+
+  const narratives = narrativesWith.map(({ commitments: _omit, ...n }) => n)
+  const commitments = narrativesWith.flatMap((n) => n.commitments)
+
   return (
     <TasksBoard
-      initialTasks={MOCK_TASKS}
-      commitments={MOCK_COMMITMENTS}
-      narratives={MOCK_NARRATIVES}
+      initialTasks={tasks}
+      commitments={commitments}
+      narratives={narratives}
+      projectLabels={projectLabels}
       profiles={profiles}
     />
   )

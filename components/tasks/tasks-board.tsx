@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useTransition } from 'react'
 import {
   DndContext,
   DragOverlay,
@@ -28,9 +28,15 @@ import {
   isOverdue,
   findProfile,
 } from '@/lib/format'
+import {
+  createManagedTask,
+  updateManagedTask,
+  moveManagedTask,
+  deleteManagedTask,
+} from '@/lib/actions/tasks-board'
 import type { TeamProfile } from '@/lib/queries/config'
-import { PROJECT_LABELS, type ManagedTask } from '@/lib/mock/tasks'
-import type { Commitment, Narrative } from '@/lib/mock/nct'
+import type { ManagedTask } from '@/lib/queries/tasks'
+import type { Commitment, Narrative } from '@/lib/queries/nct'
 import type { Database } from '@/lib/supabase/types'
 
 type TaskStatus = Database['public']['Enums']['task_status']
@@ -50,15 +56,17 @@ const selectCls =
 function TaskCardContent({
   task,
   commitmentTitle,
+  projectLabels,
   profiles,
 }: {
   task: ManagedTask
   commitmentTitle: string | undefined
+  projectLabels: Record<string, string>
   profiles: TeamProfile[]
 }) {
   const overdue = task.status !== 'done' && isOverdue(task.due_date)
   const assignee = findProfile(profiles, task.assignee_id)
-  const projectLabel = task.project_id ? PROJECT_LABELS[task.project_id] : undefined
+  const projectLabel = task.project_id ? projectLabels[task.project_id] : undefined
 
   return (
     <div className="rounded-lg border border-border bg-card p-3 shadow-sm transition-transform active:scale-[.98]">
@@ -119,11 +127,13 @@ function TaskCardContent({
 function DraggableTaskCard({
   task,
   commitmentTitle,
+  projectLabels,
   profiles,
   onOpen,
 }: {
   task: ManagedTask
   commitmentTitle: string | undefined
+  projectLabels: Record<string, string>
   profiles: TeamProfile[]
   onOpen: (task: ManagedTask) => void
 }) {
@@ -137,7 +147,12 @@ function DraggableTaskCard({
       {...attributes}
       {...listeners}
     >
-      <TaskCardContent task={task} commitmentTitle={commitmentTitle} profiles={profiles} />
+      <TaskCardContent
+        task={task}
+        commitmentTitle={commitmentTitle}
+        projectLabels={projectLabels}
+        profiles={profiles}
+      />
     </div>
   )
 }
@@ -147,6 +162,7 @@ function Column({
   status,
   tasks,
   commitmentTitleOf,
+  projectLabels,
   profiles,
   onOpen,
   onAdd,
@@ -154,6 +170,7 @@ function Column({
   status: TaskStatus
   tasks: ManagedTask[]
   commitmentTitleOf: (id: string | null) => string | undefined
+  projectLabels: Record<string, string>
   profiles: TeamProfile[]
   onOpen: (task: ManagedTask) => void
   onAdd: (status: TaskStatus) => void
@@ -190,6 +207,7 @@ function Column({
               key={t.id}
               task={t}
               commitmentTitle={commitmentTitleOf(t.commitment_id)}
+              projectLabels={projectLabels}
               profiles={profiles}
               onOpen={onOpen}
             />
@@ -210,15 +228,21 @@ export function TasksBoard({
   initialTasks,
   commitments,
   narratives,
+  projectLabels,
   profiles,
 }: {
   initialTasks: ManagedTask[]
   commitments: Commitment[]
   narratives: Narrative[]
+  projectLabels: Record<string, string>
   profiles: TeamProfile[]
 }) {
   const [tasks, setTasks] = useState<ManagedTask[]>(initialTasks)
   const [activeId, setActiveId] = useState<string | null>(null)
+  const [, startTransition] = useTransition()
+
+  // Resync com o servidor após revalidação.
+  useEffect(() => setTasks(initialTasks), [initialTasks])
 
   // Filtros globais (sentinel ALL = sem filtro).
   const [filterProject, setFilterProject] = useState<string>(ALL)
@@ -288,8 +312,16 @@ export function TasksBoard({
     if (!task) return
     const target = String(over.id) as TaskStatus
     if (target === task.status) return
-    setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, status: target } : t)))
-    toast.success(`${task.title} → ${TASK_STATUS[target].label}`)
+    const prev = tasks
+    setTasks((p) => p.map((t) => (t.id === task.id ? { ...t, status: target } : t))) // otimista
+    startTransition(async () => {
+      const res = await moveManagedTask(task.id, target)
+      if (!res.success) {
+        setTasks(prev)
+        return void toast.error(res.message)
+      }
+      toast.success(`${task.title} → ${TASK_STATUS[target].label}`)
+    })
   }
 
   // --- CRUD MOCK ---
@@ -303,18 +335,33 @@ export function TasksBoard({
     setDialogOpen(true)
   }
   function handleSubmit(task: ManagedTask) {
-    setTasks((prev) => {
-      const exists = prev.some((t) => t.id === task.id)
-      return exists ? prev.map((t) => (t.id === task.id ? task : t)) : [task, ...prev]
+    const { id: _omit, ...input } = task
+    startTransition(async () => {
+      if (editing) {
+        const res = await updateManagedTask(task.id, input)
+        if (!res.success) return void toast.error(res.message)
+        setTasks((prev) => prev.map((t) => (t.id === task.id ? task : t)))
+        setDialogOpen(false)
+        toast.success('Tarefa atualizada.')
+      } else {
+        const res = await createManagedTask(input)
+        if (!res.success || !res.task) return void toast.error(res.message)
+        setTasks((prev) => [res.task!, ...prev])
+        setDialogOpen(false)
+        toast.success('Tarefa criada.')
+      }
     })
-    setDialogOpen(false)
-    toast.success(editing ? 'Tarefa atualizada.' : 'Tarefa criada.')
   }
   function handleDelete() {
     if (!editing) return
-    setTasks((prev) => prev.filter((t) => t.id !== editing.id))
-    setDialogOpen(false)
-    toast.success('Tarefa excluída.')
+    const target = editing
+    startTransition(async () => {
+      const res = await deleteManagedTask(target.id)
+      if (!res.success) return void toast.error(res.message)
+      setTasks((prev) => prev.filter((t) => t.id !== target.id))
+      setDialogOpen(false)
+      toast.success('Tarefa excluída.')
+    })
   }
 
   return (
@@ -342,7 +389,7 @@ export function TasksBoard({
           className={selectCls}
         >
           <option value={ALL}>Todos os projetos</option>
-          {Object.entries(PROJECT_LABELS).map(([id, label]) => (
+          {Object.entries(projectLabels).map(([id, label]) => (
             <option key={id} value={id}>
               {label}
             </option>
@@ -439,6 +486,7 @@ export function TasksBoard({
                 status={status}
                 tasks={filtered.filter((t) => t.status === status)}
                 commitmentTitleOf={commitmentTitleOf}
+                projectLabels={projectLabels}
                 profiles={profiles}
                 onOpen={openEdit}
                 onAdd={openCreate}
@@ -450,6 +498,7 @@ export function TasksBoard({
               <TaskCardContent
                 task={activeTask}
                 commitmentTitle={commitmentTitleOf(activeTask.commitment_id)}
+                projectLabels={projectLabels}
                 profiles={profiles}
               />
             ) : null}
@@ -461,6 +510,7 @@ export function TasksBoard({
         task={editing}
         defaultStatus={creatingStatus}
         commitments={commitments}
+        projectLabels={projectLabels}
         profiles={profiles}
         open={dialogOpen}
         onOpenChange={setDialogOpen}

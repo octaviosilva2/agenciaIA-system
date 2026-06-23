@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button'
 import { narrativeSchema } from '@/lib/validations/nct'
 import { NARRATIVE_STATUS_LABELS } from '@/lib/format'
 import type { TeamProfile } from '@/lib/queries/config'
-import type { Narrative } from '@/lib/mock/nct'
+import type { Narrative } from '@/lib/queries/nct'
 import type { Database } from '@/lib/supabase/types'
 
 type NarrativeStatus = Database['public']['Enums']['narrative_status']

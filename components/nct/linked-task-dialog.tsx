@@ -13,7 +13,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { TASK_STATUS, TASK_PRIORITY, TASK_AREA_LABELS } from '@/lib/format'
 import type { TeamProfile } from '@/lib/queries/config'
-import type { ManagedTask } from '@/lib/mock/tasks'
+import type { ManagedTask } from '@/lib/queries/tasks'
 import type { Database } from '@/lib/supabase/types'
 
 type TaskStatus = Database['public']['Enums']['task_status']

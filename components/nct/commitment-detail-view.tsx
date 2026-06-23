@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { ArrowLeft, Plus, Check, X } from 'lucide-react'
@@ -32,9 +32,16 @@ import {
   isOverdue,
   findProfile,
 } from '@/lib/format'
+import { createCheckin, updateCommitment } from '@/lib/actions/nct'
+import {
+  createManagedTask,
+  updateManagedTask,
+  moveManagedTask,
+  deleteManagedTask,
+} from '@/lib/actions/tasks-board'
 import type { TeamProfile } from '@/lib/queries/config'
-import type { Commitment, Narrative, Checkin } from '@/lib/mock/nct'
-import type { ManagedTask } from '@/lib/mock/tasks'
+import type { Commitment, Narrative, Checkin } from '@/lib/queries/nct'
+import type { ManagedTask } from '@/lib/queries/tasks'
 import type { Database } from '@/lib/supabase/types'
 import { cn } from '@/lib/utils'
 
@@ -50,17 +57,25 @@ export function CommitmentDetailView({
   narrative,
   initialCheckins,
   initialTasks,
+  projectLabels,
   profiles,
 }: {
   commitment: Commitment
   narrative: Narrative | undefined
   initialCheckins: Checkin[]
   initialTasks: ManagedTask[]
+  projectLabels: Record<string, string>
   profiles: TeamProfile[]
 }) {
   const [commitment, setCommitment] = useState<Commitment>(initialCommitment)
   const [checkins, setCheckins] = useState<Checkin[]>(initialCheckins)
   const [tasks, setTasks] = useState<ManagedTask[]>(initialTasks)
+  const [, startTransition] = useTransition()
+
+  // Resync com o servidor após revalidação.
+  useEffect(() => setCommitment(initialCommitment), [initialCommitment])
+  useEffect(() => setCheckins(initialCheckins), [initialCheckins])
+  useEffect(() => setTasks(initialTasks), [initialTasks])
 
   // Edição inline do progresso no header.
   const [editingProgress, setEditingProgress] = useState(false)
@@ -86,33 +101,73 @@ export function CommitmentDetailView({
 
   // --- Mutações MOCK ---
   function registerCheckin(checkin: Checkin) {
-    setCheckins((prev) => [checkin, ...prev])
-    // Espelha % e confiança no header (o check-in é a fonte de verdade do estado atual).
-    setCommitment((prev) => ({
-      ...prev,
+    const input = {
+      commitment_id: checkin.commitment_id,
       progress: checkin.progress,
       confidence: checkin.confidence,
-    }))
-    setProgressDraft(checkin.progress)
-    toast.success('Check-in registrado.')
+      comment: checkin.comment,
+    }
+    startTransition(async () => {
+      const res = await createCheckin(input)
+      if (!res.success || !res.checkin) return void toast.error(res.message)
+      const created = res.checkin
+      // O check-in recém-criado (id/autor reais) vai para o topo do histórico.
+      setCheckins((prev) => [created, ...prev])
+      // Espelha % e confiança no header (o check-in é a fonte de verdade do estado atual).
+      setCommitment((prev) => ({
+        ...prev,
+        progress: created.progress,
+        confidence: created.confidence,
+      }))
+      setProgressDraft(created.progress)
+      toast.success('Check-in registrado.')
+    })
   }
 
   function saveInlineProgress() {
     const v = Math.max(0, Math.min(100, progressDraft))
-    setCommitment((prev) => ({ ...prev, progress: v }))
-    setEditingProgress(false)
-    toast.success('Progresso atualizado.')
+    const input = {
+      narrative_id: commitment.narrative_id,
+      title: commitment.title,
+      description: commitment.description,
+      type: commitment.type,
+      status: commitment.status,
+      progress: v,
+      confidence: commitment.confidence,
+      dri_id: commitment.dri_id,
+      metric_target: commitment.metric_target,
+    }
+    startTransition(async () => {
+      const res = await updateCommitment(commitment.id, input)
+      if (!res.success) return void toast.error(res.message)
+      setCommitment((prev) => ({ ...prev, progress: v }))
+      setEditingProgress(false)
+      toast.success('Progresso atualizado.')
+    })
   }
 
   function addLinkedTask(task: ManagedTask) {
-    setTasks((prev) => [task, ...prev])
-    setTaskDialogOpen(false)
-    toast.success('Tarefa criada e vinculada.')
+    const { id: _omit, ...input } = task
+    startTransition(async () => {
+      const res = await createManagedTask(input)
+      if (!res.success || !res.task) return void toast.error(res.message)
+      setTasks((prev) => [res.task!, ...prev])
+      setTaskDialogOpen(false)
+      toast.success('Tarefa criada e vinculada.')
+    })
   }
 
   function handleTaskMove(taskId: string, newStatus: TaskStatus) {
-    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t)))
-    toast.success(`Tarefa movida para ${TASK_STATUS[newStatus].label}.`)
+    const prev = tasks
+    setTasks((p) => p.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t))) // otimista
+    startTransition(async () => {
+      const res = await moveManagedTask(taskId, newStatus, commitment.id)
+      if (!res.success) {
+        setTasks(prev)
+        return void toast.error(res.message)
+      }
+      toast.success(`Tarefa movida para ${TASK_STATUS[newStatus].label}.`)
+    })
   }
 
   function openEditTask(task: ManagedTask) {
@@ -121,16 +176,26 @@ export function CommitmentDetailView({
   }
 
   function handleEditTask(task: ManagedTask) {
-    setTasks((prev) => prev.map((t) => (t.id === task.id ? task : t)))
-    setEditTaskOpen(false)
-    toast.success('Tarefa atualizada.')
+    const { id: _omit, ...input } = task
+    startTransition(async () => {
+      const res = await updateManagedTask(task.id, input)
+      if (!res.success) return void toast.error(res.message)
+      setTasks((prev) => prev.map((t) => (t.id === task.id ? task : t)))
+      setEditTaskOpen(false)
+      toast.success('Tarefa atualizada.')
+    })
   }
 
   function handleDeleteTask() {
     if (!editingTask) return
-    setTasks((prev) => prev.filter((t) => t.id !== editingTask.id))
-    setEditTaskOpen(false)
-    toast.success('Tarefa excluída.')
+    const target = editingTask
+    startTransition(async () => {
+      const res = await deleteManagedTask(target.id, commitment.id)
+      if (!res.success) return void toast.error(res.message)
+      setTasks((prev) => prev.filter((t) => t.id !== target.id))
+      setEditTaskOpen(false)
+      toast.success('Tarefa excluída.')
+    })
   }
 
   return (
@@ -331,6 +396,7 @@ export function CommitmentDetailView({
         task={editingTask}
         defaultStatus={editingTask?.status ?? 'todo'}
         commitments={[commitment]}
+        projectLabels={projectLabels}
         profiles={profiles}
         open={editTaskOpen}
         onOpenChange={setEditTaskOpen}

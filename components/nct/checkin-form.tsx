@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { checkinSchema } from '@/lib/validations/nct'
 import { CONFIDENCE_LABELS } from '@/lib/format'
-import type { Checkin } from '@/lib/mock/nct'
+import type { Checkin } from '@/lib/queries/nct'
 import type { Database } from '@/lib/supabase/types'
 
 type ConfidenceLevel = Database['public']['Enums']['confidence_level']
