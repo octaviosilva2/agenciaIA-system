@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getFinanceOverview } from '@/lib/queries/finance'
 import { getNarrativesWithCommitments } from '@/lib/queries/nct'
 import { ACTIVE_FUNNEL_STAGES } from '@/lib/rules/deal-stage'
+import { periodRange } from '@/lib/date-range'
 import type { Database } from '@/lib/supabase/types'
 
 type Enums = Database['public']['Enums']
@@ -76,16 +77,10 @@ const STALE_DAYS = 14
 // Helpers de data.
 // =====================================================================
 
-/** Intervalo [primeiro, último dia] do mês corrente. */
+/** Intervalo [primeiro, último dia] do mês corrente (Brasília), via helper único. */
 function currentMonthRange(): { from: Date; to: Date; year: number; month0: number } {
-  const now = new Date()
-  const year = now.getFullYear()
-  const month0 = now.getMonth()
-  const from = new Date(year, month0, 1)
-  from.setHours(0, 0, 0, 0)
-  const to = new Date(year, month0 + 1, 0)
-  to.setHours(23, 59, 59, 999)
-  return { from, to, year, month0 }
+  const { from, to } = periodRange('mes')
+  return { from: from!, to: to!, year: from!.getFullYear(), month0: from!.getMonth() }
 }
 
 /** Verdadeiro quando um timestamp ISO (com fuso) cai no ano/mês dados. */

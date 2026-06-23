@@ -1,40 +1,7 @@
 import { getFunnelMetrics } from '@/lib/queries/funnel'
 import { PeriodFilter } from '@/components/period-filter'
+import { resolvePeriodRange } from '@/lib/date-range'
 import { DEAL_STAGE, formatCurrency } from '@/lib/format'
-
-/**
- * Resolve o intervalo de datas a partir dos query params do PeriodFilter
- * (espelha o usePeriodDates client, mas no servidor).
- */
-function resolvePeriod(
-  periodo: string | undefined,
-  de: string | undefined,
-  ate: string | undefined,
-): { from: Date | null; to: Date | null } {
-  const now = new Date()
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-
-  switch (periodo) {
-    case 'hoje':
-      return { from: today, to: today }
-    case 'semanal': {
-      const weekStart = new Date(today)
-      weekStart.setDate(today.getDate() - today.getDay())
-      const weekEnd = new Date(weekStart)
-      weekEnd.setDate(weekStart.getDate() + 6)
-      return { from: weekStart, to: weekEnd }
-    }
-    case 'mensal': {
-      const monthStart = new Date(today.getFullYear(), today.getMonth(), 1)
-      const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0)
-      return { from: monthStart, to: monthEnd }
-    }
-    case 'personalizado':
-      return { from: de ? new Date(de) : null, to: ate ? new Date(ate) : null }
-    default:
-      return { from: null, to: null }
-  }
-}
 
 /** Percentual inteiro (0..1 → "42%"). */
 function pct(n: number): string {
@@ -57,7 +24,7 @@ export default async function FunilPage({
   searchParams: Promise<{ periodo?: string; de?: string; ate?: string }>
 }) {
   const sp = await searchParams
-  const { from, to } = resolvePeriod(sp.periodo, sp.de, sp.ate)
+  const { from, to } = resolvePeriodRange(sp.periodo, sp.de, sp.ate)
   const m = await getFunnelMetrics(from, to)
 
   const maxCount = Math.max(1, ...m.stageCounts.map((s) => s.count))

@@ -17,6 +17,7 @@ import { Plus, Repeat } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { EntityBadge } from '@/components/ui/entity-badge'
 import { TaskDialog, type TaskDraft, type TaskRecurrence } from '@/components/tasks/task-dialog'
+import { DoneColumnOverflow } from '@/components/tasks/done-column-overflow'
 import {
   TASK_STATUS,
   TASK_PRIORITY,
@@ -71,7 +72,14 @@ function TaskCardContent({ task }: { task: TaskItem }) {
   const overdue = task.status !== 'done' && isOverdue(task.dueDate)
   return (
     <div className="rounded-lg border border-border bg-card p-3 shadow-sm transition-transform active:scale-[.98]">
-      <p className="text-sm font-medium leading-snug">{task.title}</p>
+      <p
+        className={cn(
+          'text-sm font-medium leading-snug',
+          task.status === 'done' && 'text-muted-foreground line-through',
+        )}
+      >
+        {task.title}
+      </p>
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
         <EntityBadge meta={TASK_PRIORITY[task.priority]} />
         {task.recurrence === 'monthly' && (
@@ -158,6 +166,13 @@ function Column({
       >
         {tasks.length === 0 ? (
           <p className="px-1 py-6 text-center text-xs text-muted-foreground">Vazio</p>
+        ) : status === 'done' ? (
+          // Coluna Concluída: máx. 5 + "Ver todos" em modal (B2).
+          <DoneColumnOverflow
+            tasks={tasks}
+            renderCard={(t) => <DraggableTaskCard key={t.id} task={t} onOpen={onOpen} />}
+            renderModalItem={(t) => <TaskCardContent key={t.id} task={t} />}
+          />
         ) : (
           tasks.map((t) => <DraggableTaskCard key={t.id} task={t} onOpen={onOpen} />)
         )}

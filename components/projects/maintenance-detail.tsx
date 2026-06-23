@@ -17,7 +17,8 @@ import {
   archiveMaintenanceTask,
   unarchiveMaintenanceTask,
 } from '@/lib/actions/tasks'
-import { updateMaintenanceContract, setAvulsoContract, toggleChargePaid } from '@/lib/actions/project'
+import { updateMaintenanceContract, setAvulsoContract } from '@/lib/actions/project'
+import { toggleChargePaid } from '@/lib/actions/finance'
 import { EntityActionsMenu } from '@/components/entity-actions-menu'
 import { ContractStatusMenu } from '@/components/projects/contract-status-menu'
 import { ContractManageActions } from '@/components/projects/contract-manage-actions'

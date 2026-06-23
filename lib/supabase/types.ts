@@ -664,6 +664,7 @@ export type Database = {
       }
       org_settings: {
         Row: {
+          card_fee_rate: number
           created_at: string
           id: string
           stale_deal_days: number
@@ -671,6 +672,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          card_fee_rate?: number
           created_at?: string
           id?: string
           stale_deal_days?: number
@@ -678,6 +680,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          card_fee_rate?: number
           created_at?: string
           id?: string
           stale_deal_days?: number

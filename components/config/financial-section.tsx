@@ -12,8 +12,9 @@ const inputCls =
 const labelCls = 'mb-1 block text-xs font-medium'
 
 /**
- * Seção Financeiro — alíquota de imposto (org_settings.tax_rate), dados reais.
- * Migrado do antigo TaxCard; campos fantasma (future_tax_*) removidos.
+ * Seção Financeiro — alíquota de imposto (org_settings.tax_rate) e taxa de
+ * maquininha (org_settings.card_fee_rate), dados reais. A taxa de maquininha é
+ * descontada como despesa variável ao confirmar pagamento no cartão (igual ao imposto).
  */
 export function FinancialSection({ orgSettings }: { orgSettings: OrgSettingsRow }) {
   const [state, formAction, pending] = useActionState(updateTaxRate, INITIAL_ACTION_STATE)
@@ -28,15 +29,15 @@ export function FinancialSection({ orgSettings }: { orgSettings: OrgSettingsRow 
       <div>
         <h3 className="text-base font-semibold">Financeiro</h3>
         <p className="text-sm text-muted-foreground">
-          Alíquota aplicada no cálculo de receita líquida.
+          Alíquota de imposto e taxa de maquininha — descontadas ao confirmar o recebimento.
         </p>
       </div>
 
       <form action={formAction} className="rounded-lg border border-border bg-card p-4">
-        <div className="flex items-end gap-3">
+        <div className="flex flex-wrap items-end gap-3">
           <div>
             <label className={labelCls} htmlFor="cfg_tax">
-              Alíquota (%)
+              Alíquota de imposto (%)
             </label>
             <input
               id="cfg_tax"
@@ -50,12 +51,31 @@ export function FinancialSection({ orgSettings }: { orgSettings: OrgSettingsRow 
               aria-invalid={state.errors?.tax_rate ? true : undefined}
             />
           </div>
+          <div>
+            <label className={labelCls} htmlFor="cfg_fee">
+              Taxa de maquininha (%)
+            </label>
+            <input
+              id="cfg_fee"
+              name="card_fee_rate"
+              type="number"
+              min="0"
+              max="100"
+              step="0.01"
+              defaultValue={orgSettings.card_fee_rate}
+              className={inputCls}
+              aria-invalid={state.errors?.card_fee_rate ? true : undefined}
+            />
+          </div>
           <Button type="submit" disabled={pending}>
             {pending ? 'Salvando…' : 'Salvar'}
           </Button>
         </div>
         {state.errors?.tax_rate && (
           <p className="mt-1 text-xs text-destructive">{state.errors.tax_rate[0]}</p>
+        )}
+        {state.errors?.card_fee_rate && (
+          <p className="mt-1 text-xs text-destructive">{state.errors.card_fee_rate[0]}</p>
         )}
       </form>
     </section>

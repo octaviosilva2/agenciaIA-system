@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 export type OwnProfile = { id: string; name: string; email: string }
 
 /** Parâmetros de organização — uma linha única (Financeiro + CRM). */
-export type OrgSettingsRow = { tax_rate: number; stale_deal_days: number }
+export type OrgSettingsRow = { tax_rate: number; card_fee_rate: number; stale_deal_days: number }
 
 /** Membro da equipe (seção Equipe). */
 export type TeamProfile = { id: string; name: string; email: string; active: boolean }
@@ -45,7 +45,7 @@ export async function getOrgSettings(): Promise<OrgSettingsRow> {
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('org_settings')
-    .select('tax_rate,stale_deal_days')
+    .select('tax_rate,card_fee_rate,stale_deal_days')
     .single()
 
   if (error || !data) {

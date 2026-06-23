@@ -90,13 +90,15 @@ export type PaymentInstallment = {
  * Define o plano de pagamento do projeto (à vista ou parcelado).
  * Substitui as parcelas PENDENTES de fechamento (setup/avulso); preserva as já pagas.
  * Cada parcela vira uma cobrança que aparece no Financeiro.
+ *
+ * A taxa de maquininha NÃO é lançada aqui: ela só vira despesa ao CONFIRMAR o
+ * recebimento de uma cobrança no cartão (toggleChargePaid, taxa global do /config). (B5)
  */
 export async function setProjectPayment(
   projectId: string,
   dealId: string,
   companyId: string,
   installments: PaymentInstallment[],
-  cardFeeRate: number = 0, // taxa de maquininha (%) aplicada às parcelas no cartão
 ): Promise<ActionState> {
   if (installments.length === 0) {
     return { success: false, message: 'Adicione ao menos uma parcela.' }
@@ -108,7 +110,6 @@ export async function setProjectPayment(
   const supabase = await createClient()
 
   // Remove as parcelas de fechamento ainda pendentes (não mexe nas pagas/canceladas).
-  // A taxa de maquininha vinculada some por cascade (accounts_payable.source_charge_id).
   const { error: delErr } = await supabase
     .from('charges')
     .delete()
@@ -128,41 +129,9 @@ export async function setProjectPayment(
     method: it.method,
     status: 'pendente' as const,
   }))
-  const { data: created, error: insErr } = await supabase
-    .from('charges')
-    .insert(rows)
-    .select('id, amount, due_date, method, description')
-  if (insErr || !created) {
-    return { success: false, message: `Erro ao salvar parcelas: ${insErr?.message ?? ''}` }
-  }
-
-  // Taxa de maquininha: cada cobrança no cartão gera uma conta a pagar (variável)
-  // vinculada à cobrança via source_charge_id (cascade ao deletar/reconfigurar).
-  if (cardFeeRate > 0) {
-    const feeRows = (
-      created as Array<{
-        id: string
-        amount: number
-        due_date: string
-        method: string | null
-        description: string
-      }>
-    )
-      .filter((c) => c.method === 'cartao')
-      .map((c) => ({
-        description: `Taxa maquininha (${cardFeeRate}%) — ${c.description}`,
-        category: 'variavel' as const,
-        amount: Number(c.amount) * (cardFeeRate / 100),
-        due_date: c.due_date,
-        status: 'pendente' as const,
-        source_charge_id: c.id,
-      }))
-    if (feeRows.length > 0) {
-      const { error: feeErr } = await supabase.from('accounts_payable').insert(feeRows)
-      if (feeErr) {
-        return { success: false, message: `Erro ao lançar taxa de maquininha: ${feeErr.message}` }
-      }
-    }
+  const { error: insErr } = await supabase.from('charges').insert(rows)
+  if (insErr) {
+    return { success: false, message: `Erro ao salvar parcelas: ${insErr.message}` }
   }
 
   revalidatePath(`/projetos/${dealId}`)
@@ -669,34 +638,6 @@ export async function renewMaintenanceContract(
   revalidatePath(`/manutencao/${contractId}`)
   if (dealId) revalidatePath(`/projetos/${dealId}`)
   return { success: true, message: 'Contrato renovado.' }
-}
-
-/** Marca uma cobrança como recebida ou reverte para pendente. */
-export async function toggleChargePaid(
-  chargeId: string,
-  paid: boolean,
-  extraPaths: string[] = [],
-): Promise<ActionState> {
-  const supabase = await createClient()
-  const { error } = await supabase
-    .from('charges')
-    .update({
-      status: paid ? 'pago' : 'pendente',
-      paid_at: paid ? new Date().toISOString() : null,
-    })
-    .eq('id', chargeId)
-
-  if (error) return { success: false, message: `Erro: ${error.message}` }
-
-  // Revalidar Financeiro + páginas do contexto chamador
-  revalidatePath('/financeiro')
-  revalidatePath('/financeiro/contas')
-  for (const path of extraPaths) revalidatePath(path)
-
-  return {
-    success: true,
-    message: paid ? 'Marcado como recebido.' : 'Marcado como pendente.',
-  }
 }
 
 /** Atualiza o progresso manual (0–100) definido pelo programador. */

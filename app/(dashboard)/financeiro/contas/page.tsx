@@ -2,9 +2,9 @@ import { AccountsView } from '@/components/finance/accounts-view'
 import { getAccounts } from '@/lib/queries/finance'
 
 /**
- * Contas (A Receber + A Pagar) — Server Component.
- * Aceita `?tab=receber|pagar` para abrir diretamente em uma aba.
- * Abre em "Todos" (todas as abas e todo o período) por padrão.
+ * Contas — Server Component. Abas: A Receber · A Pagar (pendentes) · Receita ·
+ * Despesa (pagos). Aceita `?tab=receber|pagar|receita|despesa` para abrir direto
+ * numa aba; default = A Receber.
  */
 export default async function ContasPage({
   searchParams,
@@ -13,7 +13,10 @@ export default async function ContasPage({
 }) {
   const sp = await searchParams
 
-  const initialTab = sp.tab === 'pagar' ? 'pagar' : sp.tab === 'receber' ? 'receber' : 'todos'
+  const TABS = ['receber', 'pagar', 'receita', 'despesa'] as const
+  const initialTab = (TABS as readonly string[]).includes(sp.tab ?? '')
+    ? (sp.tab as (typeof TABS)[number])
+    : 'receber'
 
   const { charges, payables } = await getAccounts()
 

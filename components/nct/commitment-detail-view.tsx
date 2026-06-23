@@ -22,6 +22,7 @@ import { ProgressBar, ConfidenceDot } from '@/components/nct/nct-bits'
 import { CheckinForm } from '@/components/nct/checkin-form'
 import { LinkedTaskDialog } from '@/components/nct/linked-task-dialog'
 import { TaskBoardDialog } from '@/components/tasks/task-board-dialog'
+import { DoneColumnOverflow } from '@/components/tasks/done-column-overflow'
 import {
   COMMITMENT_TYPE,
   TASK_STATUS,
@@ -57,14 +58,12 @@ export function CommitmentDetailView({
   narrative,
   initialCheckins,
   initialTasks,
-  projectLabels,
   profiles,
 }: {
   commitment: Commitment
   narrative: Narrative | undefined
   initialCheckins: Checkin[]
   initialTasks: ManagedTask[]
-  projectLabels: Record<string, string>
   profiles: TeamProfile[]
 }) {
   const [commitment, setCommitment] = useState<Commitment>(initialCommitment)
@@ -396,7 +395,6 @@ export function CommitmentDetailView({
         task={editingTask}
         defaultStatus={editingTask?.status ?? 'todo'}
         commitments={[commitment]}
-        projectLabels={projectLabels}
         profiles={profiles}
         open={editTaskOpen}
         onOpenChange={setEditTaskOpen}
@@ -508,6 +506,13 @@ function KanbanColumn({
       >
         {tasks.length === 0 ? (
           <p className="py-4 text-center text-[11px] text-muted-foreground">Vazio</p>
+        ) : status === 'done' ? (
+          // Coluna Concluída: máx. 5 + "Ver todos" em modal (B2).
+          <DoneColumnOverflow
+            tasks={tasks}
+            renderCard={(t) => <DraggableTaskCard key={t.id} task={t} onOpen={onOpen} />}
+            renderModalItem={(t) => <TaskCardContent key={t.id} task={t} />}
+          />
         ) : (
           tasks.map((t) => <DraggableTaskCard key={t.id} task={t} onOpen={onOpen} />)
         )}
@@ -544,7 +549,14 @@ function TaskCardContent({ task, onClick }: { task: ManagedTask; onClick?: undef
   const overdue = task.status !== 'done' && isOverdue(task.due_date)
   return (
     <div className="rounded-md border border-border bg-card p-2.5 shadow-sm transition-colors hover:bg-accent/40">
-      <p className="text-[13px] font-medium leading-snug">{task.title}</p>
+      <p
+        className={cn(
+          'text-[13px] font-medium leading-snug',
+          task.status === 'done' && 'text-muted-foreground line-through',
+        )}
+      >
+        {task.title}
+      </p>
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
         <EntityBadge meta={TASK_PRIORITY[task.priority]} />
         {task.due_date && (

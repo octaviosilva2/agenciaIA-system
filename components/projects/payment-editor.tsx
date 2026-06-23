@@ -14,7 +14,8 @@ import {
   formatDate,
   isOverdue,
 } from '@/lib/format'
-import { setProjectPayment, toggleChargePaid, type PaymentInstallment } from '@/lib/actions/project'
+import { setProjectPayment, type PaymentInstallment } from '@/lib/actions/project'
+import { toggleChargePaid } from '@/lib/actions/finance'
 import type { ChargeRow } from '@/lib/queries/opportunity-detail'
 
 const inputCls =
@@ -66,7 +67,6 @@ export function PaymentEditor({
   const [count, setCount] = useState(2)
   const [firstDate, setFirstDate] = useState(todayISO())
   const [method, setMethod] = useState<string>('pix')
-  const [cardFeeRate, setCardFeeRate] = useState('2.5') // taxa de maquininha (%)
   const [rows, setRows] = useState<Row[]>([])
 
   const total = totalValue ?? 0
@@ -126,9 +126,8 @@ export function PaymentEditor({
       dueDate: r.dueDate,
       method: r.method || null,
     }))
-    const fee = method === 'cartao' ? Number(cardFeeRate) || 0 : 0
     setBusy(true)
-    const res = await setProjectPayment(projectId, dealId, companyId, installments, fee)
+    const res = await setProjectPayment(projectId, dealId, companyId, installments)
     setBusy(false)
     if (res.success) {
       toast.success(res.message)
@@ -270,24 +269,10 @@ export function PaymentEditor({
           </select>
         </div>
         {method === 'cartao' && (
-          <div>
-            <label className={labelCls} htmlFor="pay_fee">Taxa maquininha (%)</label>
-            <input
-              id="pay_fee"
-              type="number"
-              min="0"
-              max="20"
-              step="0.1"
-              value={cardFeeRate}
-              onChange={(e) => setCardFeeRate(e.target.value)}
-              className={`${inputCls} w-28`}
-            />
-            {Number(cardFeeRate) > 0 && rowsTotal > 0 && (
-              <p className="mt-1 text-xs text-muted-foreground">
-                Taxa: {formatCurrency(rowsTotal * (Number(cardFeeRate) / 100))} — lançada como despesa.
-              </p>
-            )}
-          </div>
+          <p className="text-xs text-muted-foreground">
+            A taxa de maquininha (definida em Configurações · Financeiro) é lançada como
+            despesa ao confirmar o recebimento de cada parcela no cartão.
+          </p>
         )}
       </div>
 

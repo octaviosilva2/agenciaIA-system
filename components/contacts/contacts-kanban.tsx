@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Clock, Ban, XCircle } from 'lucide-react'
 import {
   DndContext,
   DragOverlay,
@@ -31,7 +30,6 @@ import { validateStageTransition, canDisqualify, type DealStage } from '@/lib/ru
 import {
   changeDealStage,
   createProjectAndAdvance,
-  loseDeal,
   reactivateDeal,
   disqualifyDeal,
 } from '@/lib/actions/deals'
@@ -39,26 +37,25 @@ import {
   DraggableDealCard,
   DealCardContent,
   type KanbanDeal,
-  type DealAction,
 } from '@/components/contacts/deal-card'
 import { EntityActionsMenu } from '@/components/entity-actions-menu'
-import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { archiveContact, deleteContact } from '@/lib/actions/contacts'
 
-/** Coluna terminal à ESQUERDA de Prospect: contatos desqualificados (read-only). */
-const LEFT_TERMINAL_COLUMNS: DealStage[] = ['desqualificado']
+/** Coluna terminal à ESQUERDA: desqualificados. Aceita drop (desqualifica ao soltar). */
+const LEFT_COLUMNS: DealStage[] = ['desqualificado']
 
-/**
- * Colunas ARRASTÁVEIS da pré-venda. O avanço a partir de Oportunidade
- * (escopo → proposta → negociação) acontece na tela Oportunidades.
- */
+/** Colunas ATIVAS da pré-venda (drag livre entre elas). */
 const ACTIVE_COLUMNS: DealStage[] = ['prospect', 'lead', 'diagnostico', 'oportunidade']
 
 /**
- * Colunas TERMINAIS read-only à DIREITA: aparecem para visibilidade do desfecho,
- * mas NÃO recebem drag (o desfecho é feito em Oportunidades, ou via menu do card).
+ * Colunas à DIREITA: `fechado` é read-only (fechar acontece em Projetos);
+ * `reativar_futuramente` aceita drop. `perdido` NÃO aparece no kanban de contatos —
+ * perder é desfecho da tela de Projetos (B3).
  */
-const RIGHT_TERMINAL_COLUMNS: DealStage[] = ['fechado', 'perdido', 'reativar_futuramente']
+const RIGHT_COLUMNS: DealStage[] = ['fechado', 'reativar_futuramente']
+
+/** Estágios terminais que, ao receberem um card solto, disparam uma action de desfecho. */
+const DROP_OUTCOME: DealStage[] = ['desqualificado', 'reativar_futuramente']
 
 // Receitas de campo (design system §5.2)
 const labelCls = 'mb-1 block text-xs font-medium'
@@ -67,19 +64,25 @@ const inputCls =
 const textareaCls =
   'w-full rounded-md border border-border bg-card px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring'
 
-/** Coluna de um estágio. Ativa = droppable + cards arrastáveis; terminal = read-only. */
+/**
+ * Coluna de um estágio.
+ * - `droppable`: aceita receber um card (ativa ou terminal de desfecho).
+ * - `draggableCards`: seus próprios cards podem ser arrastados (só nas ativas).
+ */
 function Column({
   stage,
   deals,
-  terminal = false,
+  droppable,
+  draggableCards,
   renderMenu,
 }: {
   stage: DealStage
   deals: KanbanDeal[]
-  terminal?: boolean
-  renderMenu: (deal: KanbanDeal, terminal: boolean) => React.ReactNode
+  droppable: boolean
+  draggableCards: boolean
+  renderMenu: (deal: KanbanDeal) => React.ReactNode
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id: stage, disabled: terminal })
+  const { setNodeRef, isOver } = useDroppable({ id: stage, disabled: !droppable })
 
   return (
     <div className="w-60 shrink-0">
@@ -91,7 +94,7 @@ function Column({
         ref={setNodeRef}
         className={cn(
           'flex min-h-32 flex-col gap-2 rounded-lg border p-2 transition-colors',
-          terminal
+          !droppable
             ? 'border-dashed border-border bg-muted/30'
             : isOver
               ? 'border-solid border-ring bg-accent/50'
@@ -100,10 +103,10 @@ function Column({
       >
         {deals.length === 0 ? (
           <p className="px-1 py-6 text-center text-xs text-muted-foreground">Vazio</p>
-        ) : terminal ? (
-          deals.map((d) => <DealCardContent key={d.id} deal={d} menu={renderMenu(d, true)} />)
+        ) : draggableCards ? (
+          deals.map((d) => <DraggableDealCard key={d.id} deal={d} menu={renderMenu(d)} />)
         ) : (
-          deals.map((d) => <DraggableDealCard key={d.id} deal={d} menu={renderMenu(d, false)} />)
+          deals.map((d) => <DealCardContent key={d.id} deal={d} menu={renderMenu(d)} />)
         )}
       </div>
     </div>
@@ -133,35 +136,12 @@ export function ContactsKanban({
   const [projectName, setProjectName] = useState('')
   const [projectDescription, setProjectDescription] = useState('')
 
-  // Modal: motivo ao perder
-  const [lostDeal, setLostDeal] = useState<KanbanDeal | null>(null)
-  const [lostReason, setLostReason] = useState('')
-
   const router = useRouter()
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
   const activeDeal = deals.find((d) => d.id === activeId) ?? null
 
-  /** Menu ⋯ do card: ações de funil (extras) + arquivar/excluir/editar do contato. */
-  function renderMenu(deal: KanbanDeal, terminal: boolean) {
-    const funnel = !terminal ? (
-      <>
-        <DropdownMenuItem onClick={() => handleAction('reativar', deal)}>
-          <Clock />
-          Reativar futuramente
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          disabled={!canDisqualify(deal.stage)}
-          onClick={() => handleAction('desqualificar', deal)}
-        >
-          <Ban />
-          Desqualificar
-        </DropdownMenuItem>
-        <DropdownMenuItem variant="destructive" onClick={() => handleAction('perder', deal)}>
-          <XCircle />
-          Marcar como perdido
-        </DropdownMenuItem>
-      </>
-    ) : undefined
+  /** Menu ⋯ do card: só Editar/Arquivar/Excluir do contato (sem desfechos de funil — B3). */
+  function renderMenu(deal: KanbanDeal) {
     return (
       <EntityActionsMenu
         archived={false}
@@ -170,7 +150,6 @@ export function ContactsKanban({
         archiveAction={() => archiveContact(deal.companyId)}
         deleteAction={() => deleteContact(deal.companyId)}
         onChanged={() => router.refresh()}
-        extraItems={funnel}
       />
     )
   }
@@ -195,6 +174,20 @@ export function ContactsKanban({
 
     const target = String(over.id) as DealStage
     if (target === deal.stage) return
+
+    // Desfechos por arrasto nas colunas terminais droppable (B3).
+    if (target === 'desqualificado') {
+      if (!canDisqualify(deal.stage)) {
+        toast.error('Só é possível desqualificar nas fases de Prospect ou Lead.')
+        return
+      }
+      void runDisqualify(deal)
+      return
+    }
+    if (target === 'reativar_futuramente') {
+      void runReactivate(deal)
+      return
+    }
 
     const check = validateStageTransition(deal.stage, target, deal.hasProject)
     if (!check.valid) {
@@ -244,17 +237,6 @@ export function ContactsKanban({
     }
   }
 
-  function handleAction(action: DealAction, deal: KanbanDeal) {
-    if (action === 'perder') {
-      setLostReason('')
-      setLostDeal(deal)
-    } else if (action === 'reativar') {
-      void runReactivate(deal)
-    } else if (action === 'desqualificar') {
-      void runDisqualify(deal)
-    }
-  }
-
   async function runReactivate(deal: KanbanDeal) {
     const prev = deals
     patchStage(deal.id, 'reativar_futuramente')
@@ -279,37 +261,17 @@ export function ContactsKanban({
     }
   }
 
-  async function confirmLost() {
-    if (!lostDeal) return
-    if (!lostReason.trim()) {
-      toast.error('Informe o motivo da perda.')
-      return
-    }
-    const deal = lostDeal
-    const reason = lostReason
-    setLostDeal(null)
-
-    const prev = deals
-    patchStage(deal.id, 'perdido')
-    const res = await loseDeal(deal.id, reason)
-    if (!res.success) {
-      setDeals(prev)
-      toast.error(res.message)
-    } else {
-      toast.success(`${deal.company} marcado como Perdido.`)
-    }
-  }
-
   return (
     <>
       <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
         <div className="flex gap-3 overflow-x-auto pb-2">
-          {/* Terminal à esquerda: desqualificados (read-only) */}
-          {LEFT_TERMINAL_COLUMNS.map((stage) => (
+          {/* Terminal à esquerda: desqualificados (aceita drop) */}
+          {LEFT_COLUMNS.map((stage) => (
             <Column
               key={stage}
               stage={stage}
-              terminal
+              droppable
+              draggableCards={false}
               deals={visibleDeals.filter((d) => d.stage === stage)}
               renderMenu={renderMenu}
             />
@@ -321,19 +283,22 @@ export function ContactsKanban({
             <Column
               key={stage}
               stage={stage}
+              droppable
+              draggableCards
               deals={visibleDeals.filter((d) => d.stage === stage)}
               renderMenu={renderMenu}
             />
           ))}
 
-          {/* Divisória: daqui pra frente são desfechos read-only (vêm de Oportunidades) */}
+          {/* Divisória: desfechos à direita (fechado read-only; reativar aceita drop) */}
           <div className="my-1 w-px shrink-0 self-stretch bg-border" aria-hidden />
 
-          {RIGHT_TERMINAL_COLUMNS.map((stage) => (
+          {RIGHT_COLUMNS.map((stage) => (
             <Column
               key={stage}
               stage={stage}
-              terminal
+              droppable={DROP_OUTCOME.includes(stage)}
+              draggableCards={false}
               deals={visibleDeals.filter((d) => d.stage === stage)}
               renderMenu={renderMenu}
             />
@@ -391,48 +356,6 @@ export function ContactsKanban({
           <DialogFooter>
             <DialogClose render={<Button type="button" variant="outline">Cancelar</Button>} />
             <Button type="button" onClick={confirmProject}>Criar e mover</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Modal: motivo ao perder */}
-      <Dialog
-        open={!!lostDeal}
-        onOpenChange={(open) => {
-          if (!open) {
-            setLostDeal(null)
-            setLostReason('')
-          }
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Marcar como perdido</DialogTitle>
-            <DialogDescription>
-              {lostDeal ? `${lostDeal.company} — informe o motivo da perda.` : ''}
-            </DialogDescription>
-          </DialogHeader>
-          <div>
-            <label className={labelCls} htmlFor="lost_reason">Motivo</label>
-            <textarea
-              id="lost_reason"
-              rows={3}
-              value={lostReason}
-              onChange={(e) => setLostReason(e.target.value)}
-              placeholder="Ex.: escolheu concorrente / sem orçamento"
-              className={textareaCls}
-              autoFocus
-            />
-          </div>
-          <DialogFooter>
-            <DialogClose render={<Button type="button" variant="outline">Cancelar</Button>} />
-            <Button
-              type="button"
-              className="bg-red-600 text-white hover:bg-red-700"
-              onClick={confirmLost}
-            >
-              Marcar perdido
-            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

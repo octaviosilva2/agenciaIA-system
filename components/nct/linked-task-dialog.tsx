@@ -11,14 +11,14 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { TASK_STATUS, TASK_PRIORITY, TASK_AREA_LABELS } from '@/lib/format'
+import { TASK_STATUS, TASK_PRIORITY, LEVEL_SCALE_LABELS } from '@/lib/format'
 import type { TeamProfile } from '@/lib/queries/config'
 import type { ManagedTask } from '@/lib/queries/tasks'
 import type { Database } from '@/lib/supabase/types'
 
 type TaskStatus = Database['public']['Enums']['task_status']
 type TaskPriority = Database['public']['Enums']['task_priority']
-type TaskArea = Database['public']['Enums']['task_area']
+type LevelScale = Database['public']['Enums']['level_scale']
 
 const labelCls = 'mb-1 block text-xs font-medium'
 const inputCls =
@@ -27,14 +27,18 @@ const inputErrCls =
   'h-9 w-full rounded-md border border-red-500 bg-card px-3 text-sm outline-none ring-2 ring-red-500/30'
 const selectCls =
   'h-9 w-full rounded-md border border-border bg-card px-2 text-sm outline-none focus:ring-2 focus:ring-ring'
+const textareaCls =
+  'w-full rounded-md border border-border bg-card px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring'
 const errCls = 'mt-1 text-xs text-red-600 dark:text-red-400'
 
 const NONE = 'none'
 
 /**
- * Dialog simples de "criar tarefa já vinculada a este compromisso".
- * É a MESMA entidade `tasks` do módulo Tarefas — aqui só pré-preenchemos o
- * commitment_id. Ao salvar (MOCK), entrega a task pronta via callback.
+ * Dialog de "criar tarefa já vinculada a este compromisso".
+ * É a MESMA entidade `tasks` do módulo Tarefas — aqui o `commitment_id` já vem
+ * fixo (por isso não há campo "Compromisso"). Campos padronizados (anexos 1+2):
+ * Título · Descrição · Coluna · Prioridade · Responsável · Impacto · Esforço · Prazo.
+ * "Área" e "Projeto" não são expostos — `task_area` grava o default `gestao`.
  */
 export function LinkedTaskDialog({
   commitmentId,
@@ -50,21 +54,25 @@ export function LinkedTaskDialog({
   onCreate: (task: ManagedTask) => void
 }) {
   const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('')
   const [status, setStatus] = useState<TaskStatus>('todo')
   const [priority, setPriority] = useState<TaskPriority>('proximo')
-  const [area, setArea] = useState<TaskArea>('gestao')
   const [assigneeId, setAssigneeId] = useState<string>(NONE)
   const [dueDate, setDueDate] = useState('')
+  const [impact, setImpact] = useState<string>(NONE)
+  const [effort, setEffort] = useState<string>(NONE)
   const [error, setError] = useState('')
 
   useEffect(() => {
     if (!open) return
     setTitle('')
+    setDescription('')
     setStatus('todo')
     setPriority('proximo')
-    setArea('gestao')
     setAssigneeId(NONE)
     setDueDate('')
+    setImpact(NONE)
+    setEffort(NONE)
     setError('')
   }, [open])
 
@@ -77,18 +85,18 @@ export function LinkedTaskDialog({
     onCreate({
       id: `t-${Date.now()}`,
       title: t,
-      description: null,
+      description: description.trim() || null,
       status,
       priority,
-      area,
+      area: 'gestao', // não exposto na UI; default fixo
       assignee_id: assigneeId === NONE ? null : assigneeId,
       project_id: null,
       deal_id: null,
       company_id: null,
       commitment_id: commitmentId, // já vinculada
       due_date: dueDate || null,
-      impact: null,
-      effort: null,
+      impact: impact === NONE ? null : (impact as LevelScale),
+      effort: effort === NONE ? null : (effort as LevelScale),
     })
   }
 
@@ -116,6 +124,20 @@ export function LinkedTaskDialog({
               autoFocus
             />
             {error && <p className={errCls}>{error}</p>}
+          </div>
+
+          <div>
+            <label className={labelCls} htmlFor="lt_desc">
+              Descrição
+            </label>
+            <textarea
+              id="lt_desc"
+              rows={2}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Detalhes (opcional)"
+              className={textareaCls}
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -154,23 +176,6 @@ export function LinkedTaskDialog({
               </select>
             </div>
             <div>
-              <label className={labelCls} htmlFor="lt_area">
-                Área
-              </label>
-              <select
-                id="lt_area"
-                value={area}
-                onChange={(e) => setArea(e.target.value as TaskArea)}
-                className={selectCls}
-              >
-                {(Object.keys(TASK_AREA_LABELS) as TaskArea[]).map((a) => (
-                  <option key={a} value={a}>
-                    {TASK_AREA_LABELS[a]}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
               <label className={labelCls} htmlFor="lt_assignee">
                 Responsável
               </label>
@@ -184,6 +189,42 @@ export function LinkedTaskDialog({
                 {profiles.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={labelCls} htmlFor="lt_impact">
+                Impacto
+              </label>
+              <select
+                id="lt_impact"
+                value={impact}
+                onChange={(e) => setImpact(e.target.value)}
+                className={selectCls}
+              >
+                <option value={NONE}>—</option>
+                {(Object.keys(LEVEL_SCALE_LABELS) as LevelScale[]).map((l) => (
+                  <option key={l} value={l}>
+                    {LEVEL_SCALE_LABELS[l]}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={labelCls} htmlFor="lt_effort">
+                Esforço
+              </label>
+              <select
+                id="lt_effort"
+                value={effort}
+                onChange={(e) => setEffort(e.target.value)}
+                className={selectCls}
+              >
+                <option value={NONE}>—</option>
+                {(Object.keys(LEVEL_SCALE_LABELS) as LevelScale[]).map((l) => (
+                  <option key={l} value={l}>
+                    {LEVEL_SCALE_LABELS[l]}
                   </option>
                 ))}
               </select>

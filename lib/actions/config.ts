@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import type { ActionState } from '@/lib/actions/action-state'
 import {
+  cardFeeRateSchema,
   passwordSchema,
   profileNameSchema,
   staleDealDaysSchema,
@@ -95,7 +96,11 @@ async function getOrgSettingsId(
   return (data as { id: string }).id
 }
 
-/** Atualiza a alíquota de imposto (org_settings.tax_rate). */
+/**
+ * Atualiza os parâmetros financeiros (org_settings): alíquota de imposto e,
+ * quando o form também envia, a taxa de maquininha (card_fee_rate). O campo de
+ * taxa é opcional para preservar o contrato original de `tax_rate`.
+ */
 export async function updateTaxRate(
   _prev: ActionState,
   formData: FormData,
@@ -106,18 +111,29 @@ export async function updateTaxRate(
     return { success: false, message: 'Alíquota inválida.', errors }
   }
 
+  // Taxa de maquininha vem no mesmo form (opcional — só atualiza se presente).
+  const update: { tax_rate: number; card_fee_rate?: number } = { tax_rate: parsed.data.tax_rate }
+  const rawFee = formData.get('card_fee_rate')
+  let feeSaved = false
+  if (rawFee !== null) {
+    const feeParsed = cardFeeRateSchema.safeParse({ card_fee_rate: rawFee })
+    if (!feeParsed.success) {
+      const errors = feeParsed.error.flatten().fieldErrors as FieldErrors
+      return { success: false, message: 'Taxa de maquininha inválida.', errors }
+    }
+    update.card_fee_rate = feeParsed.data.card_fee_rate
+    feeSaved = true
+  }
+
   const supabase = await createClient()
   const id = await getOrgSettingsId(supabase)
   if (!id) return { success: false, message: 'Não foi possível salvar a alíquota.' }
 
-  const { error } = await supabase
-    .from('org_settings')
-    .update({ tax_rate: parsed.data.tax_rate })
-    .eq('id', id)
+  const { error } = await supabase.from('org_settings').update(update).eq('id', id)
   if (error) return { success: false, message: 'Não foi possível salvar a alíquota.' }
 
   revalidatePath('/config')
-  return { success: true, message: 'Alíquota salva.' }
+  return { success: true, message: feeSaved ? 'Configurações financeiras salvas.' : 'Alíquota salva.' }
 }
 
 /** Atualiza o prazo de deal parado (org_settings.stale_deal_days). */

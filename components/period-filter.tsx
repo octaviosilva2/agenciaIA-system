@@ -3,6 +3,7 @@
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
+import { resolvePeriodRange } from '@/lib/date-range'
 
 const ITEM_BASE =
   'flex h-8 cursor-pointer items-center gap-1.5 rounded-[6px] px-2.5 text-xs font-medium transition-colors'
@@ -136,39 +137,14 @@ export function PeriodFilter() {
 }
 
 /**
- * Hook utilitário para obter o intervalo de datas do filtro ativo.
- * Retorna { from: Date | null, to: Date | null }.
+ * Hook utilitário para obter o intervalo de datas do filtro ativo (Brasília).
+ * Delega ao helper único `resolvePeriodRange` (lib/date-range) — semana = seg→dom.
  */
 export function usePeriodDates(): { from: Date | null; to: Date | null } {
   const searchParams = useSearchParams()
-  const periodo = (searchParams.get('periodo') as PeriodValue) || 'todos'
-  const de = searchParams.get('de')
-  const ate = searchParams.get('ate')
-
-  const now = new Date()
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-
-  switch (periodo) {
-    case 'hoje':
-      return { from: today, to: today }
-    case 'semanal': {
-      const weekStart = new Date(today)
-      weekStart.setDate(today.getDate() - today.getDay())
-      const weekEnd = new Date(weekStart)
-      weekEnd.setDate(weekStart.getDate() + 6)
-      return { from: weekStart, to: weekEnd }
-    }
-    case 'mensal': {
-      const monthStart = new Date(today.getFullYear(), today.getMonth(), 1)
-      const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0)
-      return { from: monthStart, to: monthEnd }
-    }
-    case 'personalizado':
-      return {
-        from: de ? new Date(de) : null,
-        to: ate ? new Date(ate) : null,
-      }
-    default:
-      return { from: null, to: null }
-  }
+  return resolvePeriodRange(
+    searchParams.get('periodo'),
+    searchParams.get('de'),
+    searchParams.get('ate'),
+  )
 }

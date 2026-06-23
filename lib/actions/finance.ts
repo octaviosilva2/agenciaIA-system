@@ -26,22 +26,43 @@ function firstIssue(error: import('zod').ZodError): string {
   return error.issues[0]?.message ?? 'Dados inválidos.'
 }
 
+/** Normaliza uma relação que o PostgREST pode devolver como objeto ou array. */
+function one<T>(v: T | T[] | null | undefined): T | null {
+  if (v == null) return null
+  return Array.isArray(v) ? (v[0] ?? null) : v
+}
+
 // =====================================================================
 // Baixa (marcar pago/recebido).
 // =====================================================================
 
 /**
- * Marca uma cobrança como recebida (ou reverte). Ao receber, materializa o
- * imposto como conta a pagar usando a alíquota real do /config (org_settings),
- * vinculada por source_charge_id; ao reverter, remove esse imposto. Idempotente:
- * sempre limpa o imposto anterior da cobrança antes de recriar.
+ * Marca uma cobrança como recebida (ou reverte). Ao receber, materializa como
+ * conta a pagar — usando as taxas reais do /config (org_settings) — vinculadas por
+ * source_charge_id:
+ * - **imposto** (`tax_rate`): sempre que houver alíquota;
+ * - **taxa de maquininha** (`card_fee_rate`): só quando o método é cartão (igual ao imposto).
+ * A descrição de ambos identifica a ORIGEM (projeto/contrato · empresa) da cobrança (B7).
+ * Ao reverter, remove os dois. Idempotente: limpa os derivados anteriores antes de recriar.
+ *
+ * `extraPaths` revalida páginas do contexto chamador (ex.: a tela do projeto).
  */
-export async function toggleChargePaid(chargeId: string, paid: boolean): Promise<ActionState> {
+export async function toggleChargePaid(
+  chargeId: string,
+  paid: boolean,
+  extraPaths: string[] = [],
+): Promise<ActionState> {
   const supabase = await createClient()
 
+  // Origem (projeto/contrato/empresa) junto da cobrança — para a descrição (B7).
   const { data: charge, error: cErr } = await supabase
     .from('charges')
-    .select('amount, description, due_date')
+    .select(
+      `amount, description, due_date, method,
+       project:projects ( name ),
+       contract:contracts ( name ),
+       company:companies ( name )`,
+    )
     .eq('id', chargeId)
     .single()
   if (cErr || !charge) return { success: false, message: 'Cobrança não encontrada.' }
@@ -55,37 +76,58 @@ export async function toggleChargePaid(chargeId: string, paid: boolean): Promise
     .eq('id', chargeId)
   if (error) return { success: false, message: `Erro: ${error.message}` }
 
-  // Limpa o imposto anterior desta cobrança (idempotência). Filtra por categoria
-  // 'imposto' para NÃO remover outras despesas vinculadas (ex.: taxa de maquininha).
+  // Rótulo da origem: contrato (recorrência) ou projeto, + empresa quando houver.
+  const project = one(charge.project as { name: string } | { name: string }[] | null)
+  const contract = one(charge.contract as { name: string } | { name: string }[] | null)
+  const company = one(charge.company as { name: string } | { name: string }[] | null)
+  const originName = contract?.name ?? project?.name ?? charge.description
+  const origin = company?.name ? `${originName} · ${company.name}` : originName
+
+  // Limpa os derivados anteriores desta cobrança (idempotência): imposto E taxa
+  // de maquininha vinculados por source_charge_id. Não toca em despesas avulsas.
   await supabase
     .from('accounts_payable')
     .delete()
     .eq('source_charge_id', chargeId)
-    .eq('category', 'imposto')
+    .in('category', ['imposto', 'variavel'])
 
-  let taxLaunched = false
+  const derived: Database['public']['Tables']['accounts_payable']['Insert'][] = []
   if (paid) {
-    const { tax_rate } = await getOrgSettings()
+    const { tax_rate, card_fee_rate } = await getOrgSettings()
     if (tax_rate > 0) {
-      const { error: taxErr } = await supabase.from('accounts_payable').insert({
-        description: `Imposto (${tax_rate}%) — ${charge.description}`,
+      derived.push({
+        description: `Imposto (${tax_rate}%) — ${origin}`,
         category: 'imposto',
         amount: Number(charge.amount) * (tax_rate / 100),
         due_date: charge.due_date,
         status: 'pendente',
         source_charge_id: chargeId,
       })
-      if (taxErr) return { success: false, message: `Erro ao lançar imposto: ${taxErr.message}` }
-      taxLaunched = true
+    }
+    if (charge.method === 'cartao' && card_fee_rate > 0) {
+      derived.push({
+        description: `Taxa maquininha (${card_fee_rate}%) — ${origin}`,
+        category: 'variavel',
+        amount: Number(charge.amount) * (card_fee_rate / 100),
+        due_date: charge.due_date,
+        status: 'pendente',
+        source_charge_id: chargeId,
+      })
     }
   }
 
+  if (derived.length > 0) {
+    const { error: derErr } = await supabase.from('accounts_payable').insert(derived)
+    if (derErr) return { success: false, message: `Erro ao lançar imposto/taxa: ${derErr.message}` }
+  }
+
   revalidateFinance()
+  for (const path of extraPaths) revalidatePath(path)
   return {
     success: true,
     message: paid
-      ? taxLaunched
-        ? 'Recebido — imposto lançado automaticamente.'
+      ? derived.length > 0
+        ? 'Recebido — imposto/taxa lançados automaticamente.'
         : 'Marcado como recebido.'
       : 'Marcado como pendente.',
   }

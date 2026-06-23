@@ -22,6 +22,11 @@ export const taxRateSchema = z.object({
   tax_rate: z.coerce.number().min(0, 'Mínimo 0.').max(100, 'Máximo 100.'),
 })
 
+/** Taxa de maquininha (org_settings.card_fee_rate) — 0 a 100. */
+export const cardFeeRateSchema = z.object({
+  card_fee_rate: z.coerce.number().min(0, 'Mínimo 0.').max(100, 'Máximo 100.'),
+})
+
 /** Dias para considerar um deal parado (org_settings.stale_deal_days) — inteiro ≥ 1. */
 export const staleDealDaysSchema = z.object({
   stale_deal_days: z.coerce.number().int('Use um número inteiro.').min(1, 'Mínimo 1 dia.'),
@@ -36,5 +41,6 @@ export const updateProfileNameSchema = z.object({
 export type ProfileNameInput = z.infer<typeof profileNameSchema>
 export type PasswordInput = z.infer<typeof passwordSchema>
 export type TaxRateInput = z.infer<typeof taxRateSchema>
+export type CardFeeRateInput = z.infer<typeof cardFeeRateSchema>
 export type StaleDealDaysInput = z.infer<typeof staleDealDaysSchema>
 export type UpdateProfileNameInput = z.infer<typeof updateProfileNameSchema>

@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { ArrowUpRight, ChevronDown } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { formatCurrency, type MockPayableCategory } from '@/lib/format'
+import { resolvePeriodRange, parseDateOnly } from '@/lib/date-range'
+import { calculateNetRevenue } from '@/lib/rules/net-revenue'
 import type { AccountPayable, Charge } from '@/lib/queries/finance'
 
 // --- Tipos ---
@@ -72,75 +74,44 @@ const EXPENSE_FILTERS: Array<{ id: MockPayableCategory; label: string }> = [
 
 // --- Helpers ---
 
-function getKpiRange(period: KpiPeriod): { from: Date | null; to: Date | null } {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  switch (period) {
-    case 'hoje':
-      return { from: today, to: today }
-    case 'semana': {
-      const from = new Date(today)
-      from.setDate(today.getDate() - ((today.getDay() + 6) % 7))
-      const to = new Date(from)
-      to.setDate(from.getDate() + 6)
-      return { from, to }
-    }
-    case 'mes': {
-      const from = new Date(today.getFullYear(), today.getMonth(), 1)
-      const to = new Date(today.getFullYear(), today.getMonth() + 1, 0)
-      return { from, to }
-    }
-    default:
-      return { from: null, to: null }
-  }
-}
-
 function inRange(date: string, from: Date | null, to: Date | null): boolean {
   if (!from && !to) return true
-  const d = new Date(date)
-  d.setHours(0, 0, 0, 0)
+  const d = parseDateOnly(date) // date-only sem deslocar dia
   if (from && d < from) return false
   if (to && d > to) return false
   return true
 }
 
-/** Agrega itens em barras empilhadas para o nível de granularidade. */
-function computeBars(items: BarItem[], granularity: ChartGranularity): ChartBar[] {
+type Period = { label: string; from: Date; to: Date }
+
+/** Gera os períodos (de/até) de uma granularidade do gráfico. */
+function buildPeriods(granularity: ChartGranularity): Period[] {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   const year = today.getFullYear()
   const month = today.getMonth()
 
-  type Period = { label: string; from: Date; to: Date }
   const mp = (m: number): Period => ({
     label: MONTHS_PT[m],
     from: new Date(year, m, 1),
     to: new Date(year, m + 1, 0),
   })
 
-  let periods: Period[]
   switch (granularity) {
     case 'ano':
-      periods = Array.from({ length: 12 }, (_, i) => mp(i))
-      break
+      return Array.from({ length: 12 }, (_, i) => mp(i))
     case 'sem1':
-      periods = Array.from({ length: 6 }, (_, i) => mp(i))
-      break
+      return Array.from({ length: 6 }, (_, i) => mp(i))
     case 'sem2':
-      periods = Array.from({ length: 6 }, (_, i) => mp(6 + i))
-      break
+      return Array.from({ length: 6 }, (_, i) => mp(6 + i))
     case 'q1':
-      periods = [mp(0), mp(1), mp(2)]
-      break
+      return [mp(0), mp(1), mp(2)]
     case 'q2':
-      periods = [mp(3), mp(4), mp(5)]
-      break
+      return [mp(3), mp(4), mp(5)]
     case 'q3':
-      periods = [mp(6), mp(7), mp(8)]
-      break
+      return [mp(6), mp(7), mp(8)]
     case 'q4':
-      periods = [mp(9), mp(10), mp(11)]
-      break
+      return [mp(9), mp(10), mp(11)]
     case 'mensal': {
       const monthStart = new Date(year, month, 1)
       const monthEnd = new Date(year, month + 1, 0)
@@ -156,31 +127,32 @@ function computeBars(items: BarItem[], granularity: ChartGranularity): ChartBar[
         cursor.setDate(cursor.getDate() + 1)
         wn++
       }
-      periods = weeks
-      break
+      return weeks
     }
     case 'semanal': {
       const DAYS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
       const mon = new Date(today)
       mon.setDate(today.getDate() - ((today.getDay() + 6) % 7))
-      periods = Array.from({ length: 7 }, (_, i) => {
+      return Array.from({ length: 7 }, (_, i) => {
         const dd = new Date(mon)
         dd.setDate(mon.getDate() + i)
         return { label: DAYS[i], from: dd, to: dd }
       })
-      break
     }
     case 'diario':
-      periods = [{ label: 'Hoje', from: today, to: today }]
-      break
+      return [{ label: 'Hoje', from: today, to: today }]
   }
+}
 
-  return periods.map(({ label, from, to }) => {
+/** Agrega itens em barras empilhadas para o nível de granularidade. */
+function computeBars(items: BarItem[], granularity: ChartGranularity): ChartBar[] {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return buildPeriods(granularity).map(({ label, from, to }) => {
     let paid = 0, overdue = 0, upcoming = 0
     for (const item of items) {
       if (item.status === 'cancelado') continue
-      const due = new Date(item.due_date)
-      due.setHours(0, 0, 0, 0)
+      const due = parseDateOnly(item.due_date) // date-only sem deslocar dia
       if (due < from || due > to) continue
       if (item.status === 'pago') paid += item.amount
       else if (due < today) overdue += item.amount
@@ -190,19 +162,52 @@ function computeBars(items: BarItem[], granularity: ChartGranularity): ChartBar[
   })
 }
 
-/** Calcula lucro por período: receita total − despesa total. */
-function computeProfitBars(
-  charges: BarItem[],
-  payables: BarItem[],
+/**
+ * Imposto + taxa de maquininha ESTIMADOS sobre as cobranças ainda PENDENTES, por
+ * período (B8). Para a receita ainda não recebida, o imposto/taxa não foram
+ * materializados como conta a pagar — então projetamos: imposto via alíquota
+ * (calculateNetRevenue) sobre todo o pendente, taxa de maquininha sobre o pendente no cartão.
+ */
+function computeEstimatedDeductions(
+  charges: Charge[],
   granularity: ChartGranularity,
+  taxRate: number,
+  cardFeeRate: number,
+): Array<{ tax: number; fee: number }> {
+  return buildPeriods(granularity).map(({ from, to }) => {
+    let pending = 0, pendingCard = 0
+    for (const c of charges) {
+      if (c.status === 'pago' || c.status === 'cancelado') continue
+      const due = parseDateOnly(c.due_date)
+      if (due < from || due > to) continue
+      pending += c.amount
+      if (c.method === 'cartao') pendingCard += c.amount
+    }
+    const tax = pending - calculateNetRevenue(pending, taxRate)
+    const fee = pendingCard * (cardFeeRate / 100)
+    return { tax, fee }
+  })
+}
+
+/**
+ * Lucro por período já LÍQUIDO: receita − despesa − (imposto + taxa estimados
+ * sobre o pendente). Assim o lucro projetado não superestima o que ainda virá. (B8)
+ */
+function computeProfitBars(
+  charges: Charge[],
+  payables: AccountPayable[],
+  granularity: ChartGranularity,
+  taxRate: number,
+  cardFeeRate: number,
 ): ProfitBar[] {
   const rev = computeBars(charges, granularity)
   const exp = computeBars(payables, granularity)
-  return rev.map((r, i) => ({
-    label: r.label,
-    value:
-      r.paid + r.overdue + r.upcoming - (exp[i].paid + exp[i].overdue + exp[i].upcoming),
-  }))
+  const ded = computeEstimatedDeductions(charges, granularity, taxRate, cardFeeRate)
+  return rev.map((r, i) => {
+    const revenue = r.paid + r.overdue + r.upcoming
+    const expenses = exp[i].paid + exp[i].overdue + exp[i].upcoming
+    return { label: r.label, value: revenue - expenses - ded[i].tax - ded[i].fee }
+  })
 }
 
 /** Formata valor compacto para rótulos (ex.: 1800 → "1,8k"). */
@@ -215,9 +220,14 @@ function compactAmount(value: number): string {
 
 // --- Componente principal ---
 
-type Props = { allCharges: Charge[]; allPayables: AccountPayable[] }
+type Props = {
+  allCharges: Charge[]
+  allPayables: AccountPayable[]
+  taxRate: number
+  cardFeeRate: number
+}
 
-export function FinanceiroView({ allCharges, allPayables }: Props) {
+export function FinanceiroView({ allCharges, allPayables, taxRate, cardFeeRate }: Props) {
   const [kpiPeriod, setKpiPeriod] = useState<KpiPeriod>('mes')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
@@ -237,17 +247,12 @@ export function FinanceiroView({ allCharges, allPayables }: Props) {
     return received - paid
   }, [allCharges, allPayables])
 
-  // --- KPIs do período ---
+  // --- KPIs do período (intervalos via helper único, em Brasília) ---
   const kpis = useMemo(() => {
-    let from: Date | null, to: Date | null
-    if (kpiPeriod === 'personalizado') {
-      from = customFrom ? new Date(customFrom) : null
-      to = customTo ? new Date(customTo) : null
-      if (from) from.setHours(0, 0, 0, 0)
-      if (to) to.setHours(0, 0, 0, 0)
-    } else {
-      ;({ from, to } = getKpiRange(kpiPeriod))
-    }
+    const { from, to } =
+      kpiPeriod === 'personalizado'
+        ? resolvePeriodRange('personalizado', customFrom || null, customTo || null)
+        : resolvePeriodRange(kpiPeriod)
     const charges = allCharges.filter((c) => c.status !== 'cancelado' && inRange(c.due_date, from, to))
     const payables = allPayables.filter((p) => p.status !== 'cancelado' && inRange(p.due_date, from, to))
     // Receita/despesa do período = só o CONFIRMADO (pago). O pendente/vencido fica
@@ -281,8 +286,26 @@ export function FinanceiroView({ allCharges, allPayables }: Props) {
   const allActiveCharges = useMemo(() => allCharges.filter((c) => c.status !== 'cancelado'), [allCharges])
   const allActivePayables = useMemo(() => allPayables.filter((p) => p.status !== 'cancelado'), [allPayables])
   const lucroBars = useMemo(
-    () => computeProfitBars(allActiveCharges, allActivePayables, chartGran),
-    [allActiveCharges, allActivePayables, chartGran],
+    () => computeProfitBars(allActiveCharges, allActivePayables, chartGran, taxRate, cardFeeRate),
+    [allActiveCharges, allActivePayables, chartGran, taxRate, cardFeeRate],
+  )
+
+  // Despesa PROJETADA (B8): soma ao "a vencer" o imposto/taxa estimados sobre as
+  // cobranças pendentes, respeitando o filtro de categoria (imposto/variável).
+  const expDeductions = useMemo(
+    () => computeEstimatedDeductions(allActiveCharges, chartGran, taxRate, cardFeeRate),
+    [allActiveCharges, chartGran, taxRate, cardFeeRate],
+  )
+  const expBarsProjected = useMemo(
+    () =>
+      expBars.map((b, i) => ({
+        ...b,
+        upcoming:
+          b.upcoming +
+          (activeCategories.has('imposto') ? expDeductions[i].tax : 0) +
+          (activeCategories.has('variavel') ? expDeductions[i].fee : 0),
+      })),
+    [expBars, expDeductions, activeCategories],
   )
 
   // --- Toggles de filtro ---
@@ -450,7 +473,7 @@ export function FinanceiroView({ allCharges, allPayables }: Props) {
               ))}
             </div>
             <ChartLegend />
-            <StackedBarChart bars={expBars} />
+            <StackedBarChart bars={expBarsProjected} />
           </>
         )}
 

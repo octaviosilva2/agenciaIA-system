@@ -14,7 +14,6 @@ import { Button } from '@/components/ui/button'
 import {
   TASK_STATUS,
   TASK_PRIORITY,
-  TASK_AREA_LABELS,
   LEVEL_SCALE_LABELS,
 } from '@/lib/format'
 import type { TeamProfile } from '@/lib/queries/config'
@@ -41,15 +40,15 @@ const errCls = 'mt-1 text-xs text-red-600 dark:text-red-400'
 const NONE = 'none'
 
 /**
- * Dialog de criar/editar tarefa do board global. Mais rico que o da Implementação:
- * inclui área, responsável, impacto×esforço, projeto e vínculo opcional a compromisso.
- * Ao salvar (MOCK), entrega a task pronta; ao excluir, dispara o callback.
+ * Dialog de criar/editar tarefa do board global. Campos padronizados (anexos 1+2):
+ * Título · Descrição · Coluna · Prioridade · Responsável · Impacto · Esforço · Compromisso · Prazo.
+ * "Área" e "Projeto" foram removidos da UI — `task_area` é gravado com default `gestao`
+ * (preservado ao editar) e `project_id` é preservado do registro original.
  */
 export function TaskBoardDialog({
   task,
   defaultStatus,
   commitments,
-  projectLabels,
   profiles,
   open,
   onOpenChange,
@@ -59,7 +58,6 @@ export function TaskBoardDialog({
   task: ManagedTask | null
   defaultStatus: TaskStatus
   commitments: Commitment[]
-  projectLabels: Record<string, string>
   profiles: TeamProfile[]
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -70,9 +68,9 @@ export function TaskBoardDialog({
   const [description, setDescription] = useState('')
   const [status, setStatus] = useState<TaskStatus>(defaultStatus)
   const [priority, setPriority] = useState<TaskPriority>('proximo')
+  // Área não é exposta na UI; preserva o valor do registro (default `gestao` ao criar).
   const [area, setArea] = useState<TaskArea>('gestao')
   const [assigneeId, setAssigneeId] = useState<string>(NONE)
-  const [projectId, setProjectId] = useState<string>(NONE)
   const [commitmentId, setCommitmentId] = useState<string>(NONE)
   const [dueDate, setDueDate] = useState('')
   const [impact, setImpact] = useState<string>(NONE)
@@ -87,7 +85,6 @@ export function TaskBoardDialog({
     setPriority(task?.priority ?? 'proximo')
     setArea(task?.area ?? 'gestao')
     setAssigneeId(task?.assignee_id ?? NONE)
-    setProjectId(task?.project_id ?? NONE)
     setCommitmentId(task?.commitment_id ?? NONE)
     setDueDate(task?.due_date ?? '')
     setImpact(task?.impact ?? NONE)
@@ -109,7 +106,8 @@ export function TaskBoardDialog({
       priority,
       area,
       assignee_id: assigneeId === NONE ? null : assigneeId,
-      project_id: projectId === NONE ? null : projectId,
+      // project_id preservado: não é mais editável na UI.
+      project_id: task?.project_id ?? null,
       deal_id: task?.deal_id ?? null,
       company_id: task?.company_id ?? null,
       commitment_id: commitmentId === NONE ? null : commitmentId,
@@ -192,23 +190,6 @@ export function TaskBoardDialog({
               </select>
             </div>
             <div>
-              <label className={labelCls} htmlFor="tb_area">
-                Área
-              </label>
-              <select
-                id="tb_area"
-                value={area}
-                onChange={(e) => setArea(e.target.value as TaskArea)}
-                className={selectCls}
-              >
-                {(Object.keys(TASK_AREA_LABELS) as TaskArea[]).map((a) => (
-                  <option key={a} value={a}>
-                    {TASK_AREA_LABELS[a]}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
               <label className={labelCls} htmlFor="tb_assignee">
                 Responsável
               </label>
@@ -262,30 +243,9 @@ export function TaskBoardDialog({
                 ))}
               </select>
             </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={labelCls} htmlFor="tb_project">
-                Projeto
-              </label>
-              <select
-                id="tb_project"
-                value={projectId}
-                onChange={(e) => setProjectId(e.target.value)}
-                className={selectCls}
-              >
-                <option value={NONE}>—</option>
-                {Object.entries(projectLabels).map(([id, label]) => (
-                  <option key={id} value={id}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </div>
             <div>
               <label className={labelCls} htmlFor="tb_commitment">
-                Vincular a compromisso
+                Compromisso
               </label>
               <select
                 id="tb_commitment"

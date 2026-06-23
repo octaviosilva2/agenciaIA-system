@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button'
 import { EntityBadge } from '@/components/ui/entity-badge'
 import { InitialsAvatar } from '@/components/ui-shared/initials-avatar'
 import { TaskBoardDialog } from '@/components/tasks/task-board-dialog'
+import { DoneColumnOverflow } from '@/components/tasks/done-column-overflow'
 import {
   TASK_STATUS,
   TASK_PRIORITY,
@@ -41,7 +42,6 @@ import type { Database } from '@/lib/supabase/types'
 
 type TaskStatus = Database['public']['Enums']['task_status']
 type TaskPriority = Database['public']['Enums']['task_priority']
-type TaskArea = Database['public']['Enums']['task_area']
 
 /** Colunas fixas do board (mesma ordem do kanban da Implementação). */
 const COLUMNS: TaskStatus[] = ['analisar', 'todo', 'doing', 'impedimento', 'done']
@@ -70,7 +70,14 @@ function TaskCardContent({
 
   return (
     <div className="rounded-lg border border-border bg-card p-3 shadow-sm transition-transform active:scale-[.98]">
-      <p className="text-sm font-medium leading-snug">{task.title}</p>
+      <p
+        className={cn(
+          'text-sm font-medium leading-snug',
+          task.status === 'done' && 'text-muted-foreground line-through',
+        )}
+      >
+        {task.title}
+      </p>
 
       {/* Prioridade + responsável + vencimento */}
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -201,6 +208,30 @@ function Column({
       >
         {tasks.length === 0 ? (
           <p className="px-1 py-6 text-center text-xs text-muted-foreground">Vazio</p>
+        ) : status === 'done' ? (
+          // Coluna Concluída: máx. 5 + "Ver todos" em modal (B2).
+          <DoneColumnOverflow
+            tasks={tasks}
+            renderCard={(t) => (
+              <DraggableTaskCard
+                key={t.id}
+                task={t}
+                commitmentTitle={commitmentTitleOf(t.commitment_id)}
+                projectLabels={projectLabels}
+                profiles={profiles}
+                onOpen={onOpen}
+              />
+            )}
+            renderModalItem={(t) => (
+              <TaskCardContent
+                key={t.id}
+                task={t}
+                commitmentTitle={commitmentTitleOf(t.commitment_id)}
+                projectLabels={projectLabels}
+                profiles={profiles}
+              />
+            )}
+          />
         ) : (
           tasks.map((t) => (
             <DraggableTaskCard
@@ -244,10 +275,9 @@ export function TasksBoard({
   // Resync com o servidor após revalidação.
   useEffect(() => setTasks(initialTasks), [initialTasks])
 
-  // Filtros globais (sentinel ALL = sem filtro).
+  // Filtros globais (sentinel ALL = sem filtro). Área saiu junto com o campo (B1).
   const [filterProject, setFilterProject] = useState<string>(ALL)
   const [filterCommitment, setFilterCommitment] = useState<string>(ALL)
-  const [filterArea, setFilterArea] = useState<string>(ALL)
   const [filterAssignee, setFilterAssignee] = useState<string>(ALL)
   const [filterPriority, setFilterPriority] = useState<string>(ALL)
 
@@ -276,26 +306,23 @@ export function TasksBoard({
       tasks.filter((t) => {
         if (filterProject !== ALL && t.project_id !== filterProject) return false
         if (filterCommitment !== ALL && t.commitment_id !== filterCommitment) return false
-        if (filterArea !== ALL && t.area !== filterArea) return false
         if (filterAssignee !== ALL && t.assignee_id !== filterAssignee) return false
         if (filterPriority !== ALL && t.priority !== filterPriority) return false
         return true
       }),
-    [tasks, filterProject, filterCommitment, filterArea, filterAssignee, filterPriority],
+    [tasks, filterProject, filterCommitment, filterAssignee, filterPriority],
   )
 
   const activeTask = tasks.find((t) => t.id === activeId) ?? null
   const hasActiveFilter =
     filterProject !== ALL ||
     filterCommitment !== ALL ||
-    filterArea !== ALL ||
     filterAssignee !== ALL ||
     filterPriority !== ALL
 
   function clearFilters() {
     setFilterProject(ALL)
     setFilterCommitment(ALL)
-    setFilterArea(ALL)
     setFilterAssignee(ALL)
     setFilterPriority(ALL)
   }
@@ -417,20 +444,6 @@ export function TasksBoard({
         </select>
 
         <select
-          aria-label="Filtrar por área"
-          value={filterArea}
-          onChange={(e) => setFilterArea(e.target.value)}
-          className={selectCls}
-        >
-          <option value={ALL}>Todas as áreas</option>
-          {(Object.keys(TASK_AREA_LABELS) as TaskArea[]).map((a) => (
-            <option key={a} value={a}>
-              {TASK_AREA_LABELS[a]}
-            </option>
-          ))}
-        </select>
-
-        <select
           aria-label="Filtrar por pessoa"
           value={filterAssignee}
           onChange={(e) => setFilterAssignee(e.target.value)}
@@ -510,7 +523,6 @@ export function TasksBoard({
         task={editing}
         defaultStatus={creatingStatus}
         commitments={commitments}
-        projectLabels={projectLabels}
         profiles={profiles}
         open={dialogOpen}
         onOpenChange={setDialogOpen}

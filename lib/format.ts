@@ -6,6 +6,10 @@
 
 import type { Database } from '@/lib/supabase/types'
 import type { ContactStatus } from '@/lib/rules/contact-status'
+import { SP_TZ, parseDateOnly, spStartOfToday } from '@/lib/date-range'
+
+/** Detecta string de data pura 'yyyy-MM-dd' (sem hora/fuso). */
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/
 
 type Enums = Database['public']['Enums']
 
@@ -305,20 +309,30 @@ export function formatCurrency(value: number | null | undefined): string {
   }).format(value)
 }
 
-/** Formata data no padrão dd/MM/yyyy. */
+/** Formata data no padrão dd/MM/yyyy (Brasília; date-only não desloca dia). */
 export function formatDate(date: string | Date | null | undefined): string {
   if (!date) return '—'
+  if (typeof date === 'string' && DATE_ONLY.test(date)) {
+    const [y, m, d] = date.split('-')
+    return `${d}/${m}/${y}`
+  }
   const d = typeof date === 'string' ? new Date(date) : date
   return new Intl.DateTimeFormat('pt-BR', {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
+    timeZone: SP_TZ,
   }).format(d)
 }
 
-/** Formata data e hora no padrão dd/MM/yyyy HH:mm. */
+/** Formata data e hora no padrão dd/MM/yyyy HH:mm (horário de Brasília). */
 export function formatDateTime(date: string | Date | null | undefined): string {
   if (!date) return '—'
+  // date-only não carrega hora — mostra só a data (sem 00:00 enganoso de fuso).
+  if (typeof date === 'string' && DATE_ONLY.test(date)) {
+    const [y, m, d] = date.split('-')
+    return `${d}/${m}/${y}`
+  }
   const d = typeof date === 'string' ? new Date(date) : date
   return new Intl.DateTimeFormat('pt-BR', {
     day: '2-digit',
@@ -326,33 +340,38 @@ export function formatDateTime(date: string | Date | null | undefined): string {
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+    timeZone: SP_TZ,
   }).format(d)
 }
 
-/**
- * Indica se uma data de vencimento está no passado (atrasada).
- * Compara só a data (zera horas) — vence "ontem ou antes" = true.
- */
-export function isOverdue(date: string | Date | null | undefined): boolean {
-  if (!date) return false
-  const due = typeof date === 'string' ? new Date(date) : new Date(date.getTime())
-  due.setHours(0, 0, 0, 0)
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  return due.getTime() < today.getTime()
+/** Parse de vencimento para Date local 00:00 — date-only sem deslocar dia. */
+function dueAtMidnight(date: string | Date): Date {
+  if (typeof date === 'string') {
+    return DATE_ONLY.test(date) ? parseDateOnly(date) : new Date(date)
+  }
+  const d = new Date(date.getTime())
+  d.setHours(0, 0, 0, 0)
+  return d
 }
 
 /**
- * Dias entre hoje e a data: futuro positivo, passado negativo, hoje = 0.
- * null quando não há data. Compara só a data (zera horas).
+ * Indica se uma data de vencimento está no passado (atrasada), comparando com
+ * "hoje" de Brasília. Compara só a data — vence "ontem ou antes" = true.
+ */
+export function isOverdue(date: string | Date | null | undefined): boolean {
+  if (!date) return false
+  const due = dueAtMidnight(date)
+  return due.getTime() < spStartOfToday().getTime()
+}
+
+/**
+ * Dias entre "hoje" (Brasília) e a data: futuro positivo, passado negativo,
+ * hoje = 0. null quando não há data. Compara só a data.
  */
 export function daysUntil(date: string | Date | null | undefined): number | null {
   if (!date) return null
-  const due = typeof date === 'string' ? new Date(date) : new Date(date.getTime())
-  due.setHours(0, 0, 0, 0)
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  return Math.round((due.getTime() - today.getTime()) / 86_400_000)
+  const due = dueAtMidnight(date)
+  return Math.round((due.getTime() - spStartOfToday().getTime()) / 86_400_000)
 }
 
 /**
