@@ -142,8 +142,8 @@ export async function getImplementationBoard(): Promise<ImplementationItem[]> {
         project: project.name,
         company: one(d.company)?.name ?? '—',
         status: project.status,
-        // Proposta → estimado → soma das cobranças (cobre projeto pago sem proposta).
-        value: project.total_value ?? d.estimated_value ?? (charged > 0 ? charged : null),
+        // Cobranças são a fonte de verdade em deals fechados; proposta/estimado como fallback.
+        value: charged > 0 ? charged : (project.total_value ?? d.estimated_value ?? null),
         dueDate: project.due_date,
       }
     })

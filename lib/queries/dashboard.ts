@@ -225,10 +225,16 @@ async function getNctSummary(): Promise<NctSummary> {
       : 0
 
     // Último check-in por compromisso (agregado no servidor — volume pequeno).
-    const { data: checkins, error } = await supabase
-      .from('commitment_checkins')
-      .select('commitment_id, created_at')
-    if (error) throw new Error(error.message)
+    // Paralelo: checkins e dados dos compromissos não dependem um do outro.
+    const [checkinsRes, commitmentRowsRes] = await Promise.all([
+      supabase.from('commitment_checkins').select('commitment_id, created_at'),
+      supabase.from('commitments').select('id, created_at'),
+    ])
+    if (checkinsRes.error) throw new Error(checkinsRes.error.message)
+    if (commitmentRowsRes.error) throw new Error(commitmentRowsRes.error.message)
+
+    const checkins = checkinsRes.data
+    const commitmentRows = commitmentRowsRes.data
 
     const latestDaysAgo = new Map<string, number>()
     for (const ck of (checkins ?? []) as { commitment_id: string; created_at: string }[]) {
@@ -239,10 +245,6 @@ async function getNctSummary(): Promise<NctSummary> {
 
     // Idade de cada compromisso (created_at) — um compromisso recém-criado não
     // pode contar como "sem check-in há +14 dias".
-    const { data: commitmentRows, error: cmErr } = await supabase
-      .from('commitments')
-      .select('id, created_at')
-    if (cmErr) throw new Error(cmErr.message)
 
     const createdDaysAgo = new Map<string, number>()
     for (const cm of (commitmentRows ?? []) as { id: string; created_at: string }[]) {

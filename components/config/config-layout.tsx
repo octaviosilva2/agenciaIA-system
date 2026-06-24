@@ -7,6 +7,8 @@ import { AppearanceSection } from '@/components/config/appearance-section'
 import { FinancialSection } from '@/components/config/financial-section'
 import { TeamSection } from '@/components/config/team-section'
 import type { OwnProfile, OrgSettingsRow, TeamProfile } from '@/lib/queries/config'
+import { logout } from '@/app/login/actions'
+import { LogOut } from 'lucide-react'
 
 /**
  * Layout de /config — nav lateral de abas verticais (2 grupos) + painel à direita.
@@ -60,6 +62,19 @@ export function ConfigLayout({
           <TabsTrigger value="equipe" className="cursor-pointer">
             Equipe
           </TabsTrigger>
+
+          {/* Logout */}
+          <div className="mt-auto pt-4">
+            <form action={logout}>
+              <button
+                type="submit"
+                className="flex w-full cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+              >
+                <LogOut className="h-4 w-4" />
+                Sair da conta
+              </button>
+            </form>
+          </div>
         </TabsList>
 
         {/* Painel da aba ativa */}

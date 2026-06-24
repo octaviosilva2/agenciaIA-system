@@ -74,8 +74,12 @@ export async function getDealsBoard(): Promise<BoardDeal[]> {
     const company = one(d.company)
     const project = d.projects[0] ?? null
     const charged = paymentSum(project?.charges)
-    // Valor exibido: proposta → estimado → soma das cobranças (cobre projeto pago sem proposta).
-    const value = project?.total_value ?? d.estimated_value ?? (charged > 0 ? charged : null)
+    // Fechado: cobranças são a fonte de verdade (wizard popula após fechar).
+    // Aberto: proposta → estimado → cobranças como fallback.
+    const value =
+      d.stage === 'fechado' && charged > 0
+        ? charged
+        : (project?.total_value ?? d.estimated_value ?? (charged > 0 ? charged : null))
     return {
       id: d.id,
       companyId: company?.id ?? '',
