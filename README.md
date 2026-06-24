@@ -47,17 +47,19 @@ npm run build     # deve sair limpo (18 rotas)
 
 ## Documentação
 
+Toda a documentação está em [`docs/`](docs/). **Comece por [`docs/00-indice.md`](docs/00-indice.md)** — lista tudo o que existe e orienta a leitura na ordem certa.
+
+Destaques:
+
 | Arquivo | O que é |
 |---|---|
-| `docs/01-produto.md` | Visão geral, conceitos, funil, fora de escopo |
-| `docs/02-dados.md` | Schema completo do banco (tabelas, enums, RLS) |
-| `docs/03-telas.md` | Especificação funcional de cada tela |
-| `docs/04-arquitetura.md` | Stack, estrutura de pastas, padrões obrigatórios |
-| `docs/05-roteiro.md` | Roteiro de fases (histórico de execução) |
-| `docs/06-design-system.md` | Tokens, receitas de classes, badges — **leia antes de construir qualquer UI** |
-| `docs/07-handover.md` | **Estado atual do projeto + como fazer mudanças** |
-| `.work/STATUS.md` | Log detalhado de tudo que foi entregue |
-| `frontend-teste/style-guide.html` | Referência visual viva do design system (abrir no navegador) |
+| [`docs/00-indice.md`](docs/00-indice.md) | **Ponto de entrada** — índice e referência rápida |
+| [`docs/07-handover.md`](docs/07-handover.md) | Estado atual + como fazer mudanças com segurança |
+| [`docs/02-dados.md`](docs/02-dados.md) | Schema completo (tabelas, enums, RLS, migrations 0001–0019) |
+| [`docs/04-arquitetura.md`](docs/04-arquitetura.md) | Stack, estrutura de pastas, padrões obrigatórios |
+| [`docs/06-design-system.md`](docs/06-design-system.md) | Tokens e receitas de classes — leia antes de qualquer UI |
+| `frontend-teste/style-guide.html` | Referência visual viva (abrir no navegador) |
+| `.work/STATUS.md` | Log detalhado de tudo que foi construído |
 
 ---
 

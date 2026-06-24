@@ -9,11 +9,15 @@
 |---|---|---|---|
 | 0 | Fundação: app, auth, layout, sidebar | — | ✅ Concluída |
 | 1 | Banco completo: migrations + types + rules puras testadas | **GATE** | ✅ Concluída e aprovada |
-| 2 | Comercial: contatos, perfil, funil de deals, oportunidades | **GATE** | ⬜ Próxima (começa na etapa 2.0) |
-| 3 | Operacional: implementação + manutenção | — | ⬜ |
-| 4 | Financeiro: contas unificada + visão geral + sincronizações | **GATE** | ⬜ |
-| 5 | Gestão: estratégia + NCT + tarefas | — | ⬜ |
-| 6 | Dashboard + página Funil + polimento | **GATE final** | ⬜ |
+| 2 | Comercial: contatos, perfil, funil de deals, projetos | **GATE** | ✅ Concluída e aprovada |
+| 3 | Operacional: implementação + manutenção + arquivar/excluir | — | ✅ Concluída |
+| 4 | Financeiro: contas + visão geral + config | **GATE** | ✅ Concluída e aprovada |
+| 5 | Gestão: estratégia + NCT + tarefas board | — | ✅ Concluída |
+| 6 | Dashboard + página Funil + polimento | **GATE final** | ✅ Concluída e aprovada |
+| Ajustes Onda 1 | Quick wins (A1–A11, sem migration) | — | ✅ Concluída |
+| Ajustes Onda 2 | Tarefas, datas, financeiro (B1–B8, migration 0014) | — | ✅ Concluída |
+| Ajustes Onda 3 | Projeto/fechamento/implementação/manutenção (C1–C6, migrations 0015–0017) | — | ✅ Concluída |
+| Validação final | Build + 59 testes + advisors + smoke E2E | — | ✅ Concluída |
 
 A ordem é deliberada: o Comercial é o coração e destrava Operacional; Financeiro depende dos dois; NCT/Tarefas é independente; Dashboard e Funil são agregadores e vêm por último, quando todos os dados existem.
 

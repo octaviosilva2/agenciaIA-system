@@ -23,7 +23,8 @@
 | `charge_kind` | `setup, recorrencia, avulso` |
 | `charge_status` | `pendente, pago, cancelado` (reusado em accounts_payable) |
 | `charge_method` | `pix, boleto, cartao, transferencia, outro` |
-| `payable_category` | `infra, freela, ferramentas, imposto, outro` |
+| `payable_category` | `fixo, variavel, imposto` |
+| `task_recurrence` | `none, monthly` |
 | `activity_type` | `nota, reuniao, ligacao, email, whatsapp, outro` |
 | `strategy_block_kind` | `missao, proposito, swot, asis_tobe, blueprint` |
 
@@ -43,12 +44,23 @@
 | name | text not null | nome da empresa/pessoa |
 | segment | text | |
 | city | text | |
-| contact_name / contact_phone / contact_email | text | |
+| contact_name / contact_phone / contact_email | text | espelham o primeiro registro de `company_contacts` (compat) |
 | origin | **text livre** | ex.: "veio pelo Roberto que conhece a Maria". SEM enum, SEM tabela de origens |
-| owner_id | uuid fk→profiles set null | DRI |
+| owner_id | uuid fk→profiles set null | DRI (sem uso na UI — decision do Octavio: "todos somos responsáveis") |
 | notes | text | |
+| archived_at | timestamptz | NULL = ativo; preenchido = arquivado (soft delete, reversível) |
 
 **SEM coluna `status`** — o estado do contato é derivado (ver "Estado derivado" abaixo).
+
+### `company_contacts` (múltiplos contatos por empresa — migration 0015)
+| Coluna | Tipo | Regra |
+|---|---|---|
+| company_id | uuid fk→companies cascade not null | |
+| name | text not null | |
+| phone | text | |
+| position | int default 0 | ordenação; position=0 é o contato principal |
+
+UI limita a 3 contatos por empresa. O primeiro (position=0) espelha `companies.contact_name/phone` para compat.
 
 ### `deals` (Negócios)
 | Coluna | Tipo | Regra |
@@ -68,6 +80,8 @@
 | closed_at | timestamptz | preenchido quando stage ∈ {fechado, perdido, reativar_futuramente, desqualificado} |
 
 CHECKs: `perdido ⇒ lost_reason not null` · `fechado ⇒ has_maintenance not null` · `estágio terminal ⇔ closed_at not null`.
+
+`archived_at timestamptz` — NULL = ativo; preenchido = arquivado (some das listas ativas, reversível). **Excluir** é DELETE real (cascata nos projetos/tasks vinculadas).
 
 ### `deal_stage_events` (histórico do funil — alimenta a página Funil)
 | Coluna | Tipo |
@@ -93,6 +107,8 @@ Gravado pela server action a CADA mudança de estágio (incluindo a criação). 
 | owner_id | uuid fk→profiles set null | DRI |
 | drive_url | text | |
 | notes | text | |
+| proposal | jsonb default '{}' | estimativas pré-fechamento: `{setup_estimate, maintenance_min, maintenance_max, hourly_estimate, delivery_estimate, notes}` (migration 0016). Não confundir com cobranças reais (`charges`) |
+| completed_at | timestamptz | data real de conclusão (`status='entregue'`); backfill de `updated_at` para itens já entregues (migration 0019) |
 
 **Visibilidade derivada do deal:** o projeto aparece em *Oportunidades* (Comercial) enquanto `deal.stage ∈ {oportunidade, escopo, proposta, negociacao}`; aparece em *Implementação* (Operacional) quando `deal.stage = 'fechado'`. Deal perdido/reativar → projeto some das duas listas (fica acessível pelo perfil do contato).
 
@@ -118,8 +134,18 @@ Gravado pela action a cada mudança de `status`.
 | deal_id | uuid fk→deals set null | |
 | company_id | uuid fk→companies set null | |
 | commitment_id | uuid fk→commitments set null | vínculo NCT (filtro "por compromisso") |
+| contract_id | uuid fk→contracts set null | **tarefas de manutenção** (migration 0008) — vincula a tarefa ao contrato |
 | due_date | date | |
 | impact / effort | level_scale | priorização Impacto×Esforço |
+| recurrence | task_recurrence default 'none' | `none` ou `monthly` — tarefas de manutenção recorrentes (migration 0008) |
+| recurrence_day | int (1–28) | dia do mês para a próxima ocorrência (obrigatório se recurrence='monthly') |
+| archived_at | timestamptz | soft delete (migration 0009) |
+| completed_at | timestamptz | data real de conclusão (`status='done'`); backfill de `updated_at` (migration 0019) |
+
+**Distinção de contexto por vínculo:**
+- Tarefa de implementação: `project_id` setado, `area='operacional'`, gerenciada em `/implementacao/[id]`
+- Tarefa de manutenção: `contract_id` setado, `area='operacional'`, gerenciada em `/manutencao/[contractId]`
+- Tarefa global (NCT/gestão): `commitment_id` e/ou nenhum vínculo específico, gerenciada em `/tarefas`
 
 ### `contracts` (Manutenção)
 | Coluna | Tipo | Regra |
@@ -137,6 +163,17 @@ Gravado pela action a cada mudança de `status`.
 | next_contact_date | date | |
 | contact_frequency_days | int | |
 | notes | text | |
+| hourly_rate | numeric(12,2) | preço por hora do contrato avulso (migration 0010) |
+| archived_at | timestamptz | soft delete (migration 0009) |
+
+### `maintenance_interactions` (relatos de manutenção — migration 0017)
+| Coluna | Tipo | Regra |
+|---|---|---|
+| contract_id | uuid fk→contracts cascade not null | |
+| content | text not null | |
+| created_by | uuid fk→profiles set null | |
+
+Usado na seção "Relacionamento com o cliente" da tela `/manutencao/[contractId]`. O botão "Contato dado" registra uma interação e avança `contracts.next_contact_date` pela `contact_frequency_days`.
 
 ### `charges` (Contas a Receber)
 | Coluna | Tipo | Regra |
@@ -151,9 +188,10 @@ Gravado pela action a cada mudança de `status`.
 | status | charge_status default 'pendente' | |
 | method | charge_method | |
 | paid_at | timestamptz | CHECK: pago ⇔ paid_at not null |
+| hours | numeric(6,2) | horas do lançamento avulso (migration 0010) |
 | notes | text | |
 
-Idempotência de recorrência: UNIQUE parcial `(contract_id, due_date)` where contract_id is not null.
+Idempotência de recorrência: UNIQUE completo `(contract_id, due_date)` where contract_id is not null (migration 0013 tornou o índice completo para cobrir o ON CONFLICT corretamente).
 
 ### `accounts_payable` (Contas a Pagar)
 | Coluna | Tipo |
@@ -165,6 +203,7 @@ Idempotência de recorrência: UNIQUE parcial `(contract_id, due_date)` where co
 | status | charge_status default 'pendente' |
 | paid_at | timestamptz |
 | project_id | uuid fk→projects set null |
+| source_charge_id | uuid fk→charges cascade set null | vínculo à cobrança que originou o lançamento automático de imposto ou taxa de maquininha (migration 0012) |
 | supplier | text |
 | notes | text |
 
@@ -243,6 +282,7 @@ UI só permite UPDATE — nunca INSERT/DELETE.
 | Coluna | Tipo | Regra |
 |---|---|---|
 | tax_rate | numeric(5,2) default 0 | Alíquota (%) — aplicada no cálculo de receita líquida |
+| card_fee_rate | numeric(5,2) default 0 | Taxa de maquininha (%) — materializada como despesa variável ao confirmar pagamento por Cartão (migration 0014) |
 | stale_deal_days | int default 7 | X dias para "negócio parado" no Dashboard |
 
 Seed cria a linha única; UI só edita.
@@ -264,15 +304,18 @@ Deal `desqualificado` não conta como funil ativo nem como perdido — o contato
 
 | Gatilho | Efeito |
 |---|---|
-| Qualquer mudança de `deal.stage` | grava `deal_stage_events` |
-| Deal → `oportunidade` | EXIGE nome do projeto no modal → cria `projects` vinculado (company + deal). Sem projeto, a transição não acontece |
-| Deal → além de `oportunidade` | validação: precisa ter projeto vinculado |
-| Deal → `perdido` | exige `lost_reason` |
-| Deal → `desqualificado` | só permitido a partir de `prospect` ou `lead` |
-| Deal → `fechado` | exige `has_maintenance` (sim/não). Cria charge `setup` com `amount = deal.estimated_value` (editável depois), vencimento default +7 dias. Projeto passa a aparecer em Implementação. Se `has_maintenance = true` → redireciona para criar o contrato de manutenção |
-| Contrato `mensal` criado/ativado | gera `min_months` parcelas `recorrencia` em charges, a partir de `start_date`, vencendo no `billing_day`. Idempotente por (contract_id, due_date) |
-| Mudança de `project.status` | grava `project_stage_events` |
-| Check-in registrado | atualiza `progress`/`confidence` do commitment |
+| Qualquer mudança de `deal.stage` | Grava `deal_stage_events` |
+| Deal → `oportunidade` | EXIGE nome do projeto no modal → cria `projects` vinculado. Sem projeto, a transição não acontece |
+| Deal → `perdido` | Exige `lost_reason` |
+| Deal → `desqualificado` | Só permitido a partir de `prospect` ou `lead` |
+| Deal → `fechado` (wizard) | Coleta valor/parcelas/método de pagamento e opção de manutenção. Cria `charges` kind `setup` (parcelas de pagamento) + contrato de manutenção se solicitado. Sincroniza `projects.total_value` com a soma das parcelas |
+| Contrato `mensal` criado/reconfigurado | Gera `min_months` parcelas `recorrencia` em `charges`; idempotente por `(contract_id, due_date)` via upsert; preserva pagas |
+| Mudança de `project.status` | Grava `project_stage_events` |
+| `charges` com método=Cartão marcada como paga | Materializa taxa de maquininha (`card_fee_rate`) como `accounts_payable` categoria `variavel`, vinculada por `source_charge_id` |
+| Qualquer `charges` paga (quando `tax_rate > 0`) | Materializa imposto como `accounts_payable` categoria `imposto`, vinculada por `source_charge_id` |
+| Check-in NCT registrado | Atualiza `progress`/`confidence` no `commitment` (espelho do último check-in) |
+| Tarefa mensal de manutenção concluída (`status→'done'`) | Gera automaticamente a próxima ocorrência (status `todo`, vencimento no próximo `recurrence_day`) |
+| "Contato dado" em manutenção | Registra `maintenance_interaction` + avança `next_contact_date` pelo `contact_frequency_days` (base = max(hoje, próximo) para robustez em atrasados) |
 
 ## RLS e acesso
 
@@ -282,6 +325,28 @@ Organização fechada de 2 sócios — padrão deliberado:
 - `anon` não acessa nada. Sem signup público (usuários criados no painel do Supabase).
 - Os warnings `rls_policy_always_true` do advisor são esperados e aceitos.
 
-## Migrations
+## Migrations aplicadas (0001–0019)
 
-Numeradas `0001_…` em `supabase/migrations/`, aplicadas via MCP. Sugestão de corte: `0001` enums+profiles+companies · `0002` deals+events+diagnostics+activities · `0003` projects+events+tasks · `0004` contracts+charges+payables · `0005` NCT (narratives, commitments, checkins) · `0006` strategy_blocks+org_settings+seeds · `0007` índices (FKs, due_date, stage).
+Arquivos em `supabase/migrations/`. **Próxima livre: 0020.** Aplicar via MCP `supabase` → regenerar `lib/supabase/types.ts`.
+
+| Migration | Conteúdo |
+|---|---|
+| 0001 | Enums + `profiles` + `companies` |
+| 0002 | `deals` + `deal_stage_events` + `diagnostics` + `activities` |
+| 0003 | `projects` + `project_stage_events` + `tasks` |
+| 0004 | `contracts` + `charges` + `accounts_payable` |
+| 0005 | NCT: `narratives` + `commitments` + `commitment_checkins` |
+| 0006 | `strategy_blocks` + `org_settings` + seeds (5 blocos fixos + linha de settings) |
+| 0007 | Índices + RLS `authenticated_all` em todas as tabelas |
+| 0008 | `tasks.contract_id/recurrence/recurrence_day` + enum `task_recurrence` (tarefas de manutenção) |
+| 0009 | `archived_at` em `companies`, `deals`, `contracts`, `tasks` (soft delete) |
+| 0010 | `contracts.hourly_rate` + `charges.hours` (manutenção avulsa por hora) |
+| 0011 | Recreate de enum `payable_category` → `fixo/variavel/imposto` (migration destrutiva) |
+| 0012 | `accounts_payable.source_charge_id` FK→charges (para rastrear imposto/taxa originados de uma cobrança) |
+| 0013 | Índice UNIQUE `(contract_id, due_date)` em `charges` passou de parcial para completo |
+| 0014 | `org_settings.card_fee_rate` (taxa de maquininha global) |
+| 0015 | Tabela `company_contacts` (múltiplos contatos por empresa); migra dado atual |
+| 0016 | `projects.proposal jsonb` (estimativas pré-fechamento) |
+| 0017 | Tabela `maintenance_interactions` (relatos de manutenção) |
+| 0018 | Hardening: revoga `EXECUTE` de `rls_auto_enable` de PUBLIC/anon/authenticated |
+| 0019 | `projects.completed_at` + `tasks.completed_at` (data real de conclusão; backfill de `updated_at`) |
