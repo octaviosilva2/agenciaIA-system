@@ -114,6 +114,15 @@ export function OpportunityActions({
       toast.error('Informe o valor da implementação.')
       return
     }
+    // Valida a manutenção ANTES de fechar — evita marcar fechado/pagar e falhar no contrato.
+    if (maint === 'mensal' && !(Number(monthlyValue) > 0)) {
+      toast.error('Informe o valor mensal da manutenção.')
+      return
+    }
+    if (maint === 'avulso' && !(Number(hourlyRate) > 0)) {
+      toast.error('Informe o preço por hora da manutenção.')
+      return
+    }
     const maintenance: CloseMaintenanceInput =
       maint === 'mensal'
         ? {

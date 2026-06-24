@@ -35,12 +35,15 @@ const errorTextCls = 'mt-1 text-xs text-red-600 dark:text-red-400'
 export function NewContactDialog() {
   const [open, setOpen] = useState(false)
   const formRef = useRef<HTMLFormElement>(null)
+  // Remonta o ContactsFieldset (estado controlado) ao limpar o form após salvar.
+  const [resetKey, setResetKey] = useState(0)
   const [state, formAction, pending] = useActionState(createContact, INITIAL_ACTION_STATE)
 
   useEffect(() => {
     if (state.success) {
       toast.success(state.message)
       formRef.current?.reset()
+      setResetKey((k) => k + 1)
       setOpen(false)
     } else if (state.message && state.errors) {
       // erros de validação ficam inline; um toast curto sinaliza a falha
@@ -94,7 +97,7 @@ export function NewContactDialog() {
             <input id="city" name="city" placeholder="Ex.: Balneário Camboriú" className={inputCls} />
           </div>
 
-          <ContactsFieldset />
+          <ContactsFieldset key={resetKey} />
 
           <div className="sm:col-span-2">
             <label className={labelCls} htmlFor="contact_email">E-mail</label>
