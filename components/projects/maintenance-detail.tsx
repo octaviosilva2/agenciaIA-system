@@ -24,6 +24,7 @@ import {
   registerMaintenanceContact,
 } from '@/lib/actions/project'
 import { toggleChargePaid } from '@/lib/actions/finance'
+import { MarkPaidPopover } from '@/components/finance/mark-paid-popover'
 import { EntityActionsMenu } from '@/components/entity-actions-menu'
 import { ContractStatusMenu } from '@/components/projects/contract-status-menu'
 import { ContractManageActions } from '@/components/projects/contract-manage-actions'
@@ -170,9 +171,9 @@ export function MaintenanceDetail({ data }: { data: MaintenanceDetailData }) {
     }
   }
 
-  async function handleToggle(chargeId: string, paid: boolean) {
+  async function handleToggle(chargeId: string, paid: boolean, date?: string) {
     setBusyIds((prev) => [...prev, chargeId])
-    const res = await toggleChargePaid(chargeId, paid, [`/manutencao/${data.contractId}`])
+    const res = await toggleChargePaid(chargeId, paid, [`/manutencao/${data.contractId}`], date ?? null)
     setBusyIds((prev) => prev.filter((id) => id !== chargeId))
     if (res.success) {
       toast.success(res.message)
@@ -381,20 +382,35 @@ export function MaintenanceDetail({ data }: { data: MaintenanceDetailData }) {
                             {formatCurrency(c.amount)}
                           </span>
                           <EntityBadge meta={overdue ? CHARGE_OVERDUE : CHARGE_STATUS[c.status]} />
-                          {/* Botão de marcar como recebido */}
-                          <button
-                            type="button"
-                            disabled={c.status === 'cancelado' || isBusy}
-                            onClick={() => handleToggle(c.id, c.status !== 'pago')}
-                            title={c.status === 'pago' ? 'Desmarcar recebimento' : 'Marcar como recebido'}
-                            className="text-muted-foreground hover:text-green-600 disabled:opacity-40 dark:hover:text-green-400"
-                          >
-                            {c.status === 'pago' ? (
+                          {/* Marcar como recebido (popover c/ data) ou desmarcar (clique direto) */}
+                          {c.status === 'pago' ? (
+                            <button
+                              type="button"
+                              disabled={isBusy}
+                              onClick={() => handleToggle(c.id, false)}
+                              title="Desmarcar recebimento"
+                              className="text-muted-foreground hover:text-green-600 disabled:opacity-40 dark:hover:text-green-400"
+                            >
                               <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
-                            ) : (
-                              <Circle className="h-4 w-4" />
-                            )}
-                          </button>
+                            </button>
+                          ) : (
+                            <MarkPaidPopover
+                              title="Marcar como recebido"
+                              confirmLabel="Recebido"
+                              disabled={c.status === 'cancelado' || isBusy}
+                              onConfirm={(date) => handleToggle(c.id, true, date)}
+                              trigger={
+                                <button
+                                  type="button"
+                                  disabled={c.status === 'cancelado' || isBusy}
+                                  title="Marcar como recebido"
+                                  className="text-muted-foreground hover:text-green-600 disabled:opacity-40 dark:hover:text-green-400"
+                                >
+                                  <Circle className="h-4 w-4" />
+                                </button>
+                              }
+                            />
+                          )}
                         </div>
                       </li>
                     )
@@ -556,20 +572,35 @@ export function MaintenanceDetail({ data }: { data: MaintenanceDetailData }) {
                         <div className="flex shrink-0 items-center gap-2">
                           <span className="font-mono tabular-nums">{formatCurrency(c.amount)}</span>
                           <EntityBadge meta={overdue ? CHARGE_OVERDUE : CHARGE_STATUS[c.status]} />
-                          {/* Botão de marcar como recebido */}
-                          <button
-                            type="button"
-                            disabled={c.status === 'cancelado' || isBusy}
-                            onClick={() => handleToggle(c.id, c.status !== 'pago')}
-                            title={c.status === 'pago' ? 'Desmarcar recebimento' : 'Marcar como recebido'}
-                            className="text-muted-foreground hover:text-green-600 disabled:opacity-40 dark:hover:text-green-400"
-                          >
-                            {c.status === 'pago' ? (
+                          {/* Marcar como recebido (popover c/ data) ou desmarcar (clique direto) */}
+                          {c.status === 'pago' ? (
+                            <button
+                              type="button"
+                              disabled={isBusy}
+                              onClick={() => handleToggle(c.id, false)}
+                              title="Desmarcar recebimento"
+                              className="text-muted-foreground hover:text-green-600 disabled:opacity-40 dark:hover:text-green-400"
+                            >
                               <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
-                            ) : (
-                              <Circle className="h-4 w-4" />
-                            )}
-                          </button>
+                            </button>
+                          ) : (
+                            <MarkPaidPopover
+                              title="Marcar como recebido"
+                              confirmLabel="Recebido"
+                              disabled={c.status === 'cancelado' || isBusy}
+                              onConfirm={(date) => handleToggle(c.id, true, date)}
+                              trigger={
+                                <button
+                                  type="button"
+                                  disabled={c.status === 'cancelado' || isBusy}
+                                  title="Marcar como recebido"
+                                  className="text-muted-foreground hover:text-green-600 disabled:opacity-40 dark:hover:text-green-400"
+                                >
+                                  <Circle className="h-4 w-4" />
+                                </button>
+                              }
+                            />
+                          )}
                         </div>
                       </li>
                     )

@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { calculateNetRevenue } from '@/lib/rules/net-revenue'
 import { getOrgSettings } from '@/lib/queries/config'
+import { spDateOnlyFromISO } from '@/lib/date-range'
 import type { Database } from '@/lib/supabase/types'
 
 type Enums = Database['public']['Enums']
@@ -173,11 +174,25 @@ export type FinanceOverview = {
 
 type PeriodRange = { from?: Date | null; to?: Date | null }
 
-/** Verdadeiro quando a data (yyyy-MM-dd) cai dentro de [from, to] (inclusive). */
+/** Verdadeiro quando a data de VENCIMENTO (yyyy-MM-dd) cai dentro de [from, to] (inclusive). */
 function inRange(dateStr: string, from?: Date | null, to?: Date | null): boolean {
   if (!from && !to) return true
   const d = new Date(dateStr)
   d.setHours(0, 0, 0, 0)
+  if (from && d < from) return false
+  if (to && d > to) return false
+  return true
+}
+
+/**
+ * Verdadeiro quando o INSTANTE de pagamento (`paid_at` ISO) cai em [from, to].
+ * Reconhecimento por regime de caixa: a receita/despesa conta no DIA em que foi
+ * paga (Brasília), não no vencimento. `paid_at` nulo nunca entra no período.
+ */
+function paidInRange(paidAt: string | null, from?: Date | null, to?: Date | null): boolean {
+  if (paidAt == null) return false
+  if (!from && !to) return true
+  const d = spDateOnlyFromISO(paidAt)
   if (from && d < from) return false
   if (to && d > to) return false
   return true
@@ -192,38 +207,38 @@ export async function getFinanceOverview({ from, to }: PeriodRange = {}): Promis
   const settings = await getOrgSettings()
 
   const [chargesRes, payablesRes] = await Promise.all([
-    supabase.from('charges').select('amount, status, due_date'),
-    supabase.from('accounts_payable').select('amount, status, due_date'),
+    supabase.from('charges').select('amount, status, due_date, paid_at'),
+    supabase.from('accounts_payable').select('amount, status, due_date, paid_at'),
   ])
 
   if (chargesRes.error) throw new Error(`Falha ao carregar cobranças: ${chargesRes.error.message}`)
   if (payablesRes.error) throw new Error(`Falha ao carregar contas a pagar: ${payablesRes.error.message}`)
 
-  const charges = (chargesRes.data ?? []).filter(
-    (c) => c.status !== 'cancelado' && inRange(c.due_date, from, to),
-  )
-  const payables = (payablesRes.data ?? []).filter(
-    (p) => p.status !== 'cancelado' && inRange(p.due_date, from, to),
-  )
+  // Cancelados nunca contam. O recorte de período é aplicado por valor:
+  // realizado (pago) → data de PAGAMENTO; pendente → VENCIMENTO.
+  const charges = (chargesRes.data ?? []).filter((c) => c.status !== 'cancelado')
+  const payables = (payablesRes.data ?? []).filter((p) => p.status !== 'cancelado')
 
-  // Receita bruta = só o confirmado (pago); pendente/vencido fica em "a receber".
+  // Receita bruta = confirmado (pago) reconhecido na data de pagamento (caixa).
   const grossRevenue = charges
-    .filter((c) => c.status === 'pago')
+    .filter((c) => c.status === 'pago' && paidInRange(c.paid_at, from, to))
     .reduce((s, c) => s + Number(c.amount), 0)
   const netRevenue = calculateNetRevenue(grossRevenue, settings.tax_rate)
   const taxes = grossRevenue - netRevenue
 
+  // A receber/a pagar = pendente, reconhecido pelo vencimento.
   const toReceive = charges
-    .filter((c) => c.status === 'pendente')
+    .filter((c) => c.status === 'pendente' && inRange(c.due_date, from, to))
     .reduce((s, c) => s + Number(c.amount), 0)
   const toPay = payables
-    .filter((p) => p.status === 'pendente')
+    .filter((p) => p.status === 'pendente' && inRange(p.due_date, from, to))
     .reduce((s, p) => s + Number(p.amount), 0)
 
-  const received = charges
-    .filter((c) => c.status === 'pago')
-    .reduce((s, c) => s + Number(c.amount), 0)
-  const paid = payables.filter((p) => p.status === 'pago').reduce((s, p) => s + Number(p.amount), 0)
+  // Saldo de caixa = recebido − pago, ambos pela data de pagamento.
+  const received = grossRevenue
+  const paid = payables
+    .filter((p) => p.status === 'pago' && paidInRange(p.paid_at, from, to))
+    .reduce((s, p) => s + Number(p.amount), 0)
   const balance = received - paid
 
   return { grossRevenue, taxes, netRevenue, toReceive, toPay, balance }

@@ -2,9 +2,11 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { format } from 'date-fns'
 import { toast } from 'sonner'
 import { CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { updateProjectDueDate, updateProjectStatus } from '@/lib/actions/project'
 import { deliveryCountdown, isOverdue } from '@/lib/format'
 import type { Database } from '@/lib/supabase/types'
@@ -13,6 +15,11 @@ type ProjectStatus = Database['public']['Enums']['project_status']
 
 const inputCls =
   'h-9 rounded-md border border-border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-ring'
+
+/** Data de hoje em 'yyyy-MM-dd'. */
+function todayISO(): string {
+  return format(new Date(), 'yyyy-MM-dd')
+}
 
 /**
  * Prazo de entrega + conclusão do projeto, na tela do projeto.
@@ -32,6 +39,8 @@ export function DeliveryControls({
   const router = useRouter()
   const [due, setDue] = useState(dueDate ?? '')
   const [busy, setBusy] = useState(false)
+  const [deliverOpen, setDeliverOpen] = useState(false)
+  const [deliverDate, setDeliverDate] = useState(todayISO()) // data da entrega (retroativa)
 
   const delivered = status === 'entregue'
   const changed = (dueDate ?? '') !== due
@@ -100,15 +109,51 @@ export function DeliveryControls({
       </div>
 
       {!delivered && (
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={busy}
-          onClick={() => void run(updateProjectStatus(projectId, dealId, 'entregue'))}
+        <Popover
+          open={deliverOpen}
+          onOpenChange={(o) => {
+            setDeliverOpen(o)
+            if (o) setDeliverDate(todayISO())
+          }}
         >
-          <CheckCircle2 className="h-4 w-4" />
-          Marcar como entregue
-        </Button>
+          <PopoverTrigger
+            render={
+              <Button variant="outline" size="sm" disabled={busy}>
+                <CheckCircle2 className="h-4 w-4" />
+                Marcar como entregue
+              </Button>
+            }
+          />
+          <PopoverContent align="start" className="w-60 gap-2">
+            <p className="text-xs font-medium">Data da entrega</p>
+            <input
+              type="date"
+              value={deliverDate}
+              onChange={(e) => setDeliverDate(e.target.value)}
+              className={`${inputCls} w-full`}
+              aria-label="Data da entrega"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              A conclusão será registrada nesta data.
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => setDeliverOpen(false)}>
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                disabled={busy}
+                onClick={() => {
+                  setDeliverOpen(false)
+                  void run(updateProjectStatus(projectId, dealId, 'entregue', deliverDate))
+                }}
+              >
+                Confirmar
+              </Button>
+            </div>
+          </PopoverContent>
+        </Popover>
       )}
     </div>
   )

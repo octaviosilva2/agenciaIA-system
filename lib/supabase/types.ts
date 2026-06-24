@@ -828,6 +828,7 @@ export type Database = {
       projects: {
         Row: {
           company_id: string
+          completed_at: string | null
           created_at: string
           custom_stages: Json | null
           deal_id: string | null
@@ -847,6 +848,7 @@ export type Database = {
         }
         Insert: {
           company_id: string
+          completed_at?: string | null
           created_at?: string
           custom_stages?: Json | null
           deal_id?: string | null
@@ -866,6 +868,7 @@ export type Database = {
         }
         Update: {
           company_id?: string
+          completed_at?: string | null
           created_at?: string
           custom_stages?: Json | null
           deal_id?: string | null
@@ -949,6 +952,7 @@ export type Database = {
           assignee_id: string | null
           commitment_id: string | null
           company_id: string | null
+          completed_at: string | null
           contract_id: string | null
           created_at: string
           deal_id: string | null
@@ -971,6 +975,7 @@ export type Database = {
           assignee_id?: string | null
           commitment_id?: string | null
           company_id?: string | null
+          completed_at?: string | null
           contract_id?: string | null
           created_at?: string
           deal_id?: string | null
@@ -993,6 +998,7 @@ export type Database = {
           assignee_id?: string | null
           commitment_id?: string | null
           company_id?: string | null
+          completed_at?: string | null
           contract_id?: string | null
           created_at?: string
           deal_id?: string | null

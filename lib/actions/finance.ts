@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { getOrgSettings } from '@/lib/queries/config'
+import { paymentInstantFromYmd, spYmdFromISO } from '@/lib/date-range'
 import { chargeSchema, accountPayableSchema } from '@/lib/validations/finance'
 import type { ActionState } from '@/lib/actions/action-state'
 import type { Charge, AccountPayable } from '@/lib/queries/finance'
@@ -37,24 +38,36 @@ function one<T>(v: T | T[] | null | undefined): T | null {
 // =====================================================================
 
 /**
+ * Resolve o instante de pagamento a gravar em `paid_at`. `paidDate` ('yyyy-MM-dd',
+ * opcional) permite lançar com data retroativa; sem ela, usa o agora (data do clique).
+ */
+function resolvePaidAt(paid: boolean, paidDate?: string | null): string | null {
+  if (!paid) return null
+  return paidDate ? paymentInstantFromYmd(paidDate) : new Date().toISOString()
+}
+
+/**
  * Marca uma cobrança como recebida (ou reverte). Ao receber, materializa como
  * conta a pagar — usando as taxas reais do /config (org_settings) — vinculadas por
- * source_charge_id:
+ * source_charge_id, na categoria "Taxas" (`imposto`):
  * - **imposto** (`tax_rate`): sempre que houver alíquota;
- * - **taxa de maquininha** (`card_fee_rate`): só quando o método é cartão (igual ao imposto).
- * A descrição de ambos identifica a ORIGEM (projeto/contrato · empresa) da cobrança (B7).
- * Ao reverter, remove os dois. Idempotente: limpa os derivados anteriores antes de recriar.
+ * - **taxa de maquininha** (`card_fee_rate`): só quando o método é cartão.
+ * A descrição de ambos identifica a PARCELA + ORIGEM (projeto/contrato · empresa).
+ * O vencimento dos derivados é a DATA DO PAGAMENTO (regime de caixa), não o
+ * vencimento da cobrança original. Ao reverter, remove os dois. Idempotente.
  *
+ * `paidDate` ('yyyy-MM-dd') permite lançar com data retroativa (default = hoje).
  * `extraPaths` revalida páginas do contexto chamador (ex.: a tela do projeto).
  */
 export async function toggleChargePaid(
   chargeId: string,
   paid: boolean,
   extraPaths: string[] = [],
+  paidDate?: string | null,
 ): Promise<ActionState> {
   const supabase = await createClient()
 
-  // Origem (projeto/contrato/empresa) junto da cobrança — para a descrição (B7).
+  // Origem (projeto/contrato/empresa) junto da cobrança — para a descrição.
   const { data: charge, error: cErr } = await supabase
     .from('charges')
     .select(
@@ -67,24 +80,31 @@ export async function toggleChargePaid(
     .single()
   if (cErr || !charge) return { success: false, message: 'Cobrança não encontrada.' }
 
+  const paidAt = resolvePaidAt(paid, paidDate)
+
   const { error } = await supabase
     .from('charges')
-    .update({
-      status: paid ? 'pago' : 'pendente',
-      paid_at: paid ? new Date().toISOString() : null,
-    })
+    .update({ status: paid ? 'pago' : 'pendente', paid_at: paidAt })
     .eq('id', chargeId)
   if (error) return { success: false, message: `Erro: ${error.message}` }
 
-  // Rótulo da origem: contrato (recorrência) ou projeto, + empresa quando houver.
+  // Rótulo: PARCELA (charge.description: "Parcela 2/3", "Pagamento do projeto", …)
+  // + origem (contrato/projeto) + empresa, sem repetir partes vazias.
   const project = one(charge.project as { name: string } | { name: string }[] | null)
   const contract = one(charge.contract as { name: string } | { name: string }[] | null)
   const company = one(charge.company as { name: string } | { name: string }[] | null)
-  const originName = contract?.name ?? project?.name ?? charge.description
-  const origin = company?.name ? `${originName} · ${company.name}` : originName
+  const originName = contract?.name ?? project?.name ?? null
+  const labelParts = [charge.description, originName, company?.name].filter(
+    (p): p is string => !!p,
+  )
+  const origin = labelParts.join(' · ')
 
-  // Limpa os derivados anteriores desta cobrança (idempotência): imposto E taxa
-  // de maquininha vinculados por source_charge_id. Não toca em despesas avulsas.
+  // Vencimento dos derivados = dia do PAGAMENTO (não o vencimento da cobrança).
+  const derivedDue = paidAt ? spYmdFromISO(paidAt) : charge.due_date
+
+  // Limpa os derivados anteriores desta cobrança (idempotência): imposto/taxa
+  // (categorias imposto E variavel, para também limpar dados legados). Não toca
+  // em despesas avulsas (sem source_charge_id).
   await supabase
     .from('accounts_payable')
     .delete()
@@ -99,7 +119,7 @@ export async function toggleChargePaid(
         description: `Imposto (${tax_rate}%) — ${origin}`,
         category: 'imposto',
         amount: Number(charge.amount) * (tax_rate / 100),
-        due_date: charge.due_date,
+        due_date: derivedDue,
         status: 'pendente',
         source_charge_id: chargeId,
       })
@@ -107,9 +127,9 @@ export async function toggleChargePaid(
     if (charge.method === 'cartao' && card_fee_rate > 0) {
       derived.push({
         description: `Taxa maquininha (${card_fee_rate}%) — ${origin}`,
-        category: 'variavel',
+        category: 'imposto',
         amount: Number(charge.amount) * (card_fee_rate / 100),
-        due_date: charge.due_date,
+        due_date: derivedDue,
         status: 'pendente',
         source_charge_id: chargeId,
       })
@@ -127,21 +147,25 @@ export async function toggleChargePaid(
     success: true,
     message: paid
       ? derived.length > 0
-        ? 'Recebido — imposto/taxa lançados automaticamente.'
+        ? 'Recebido — taxas lançadas automaticamente.'
         : 'Marcado como recebido.'
       : 'Marcado como pendente.',
   }
 }
 
-/** Marca uma conta a pagar como paga (ou reverte). */
-export async function togglePayablePaid(payableId: string, paid: boolean): Promise<ActionState> {
+/**
+ * Marca uma conta a pagar como paga (ou reverte). `paidDate` ('yyyy-MM-dd')
+ * permite lançar com data retroativa (default = hoje).
+ */
+export async function togglePayablePaid(
+  payableId: string,
+  paid: boolean,
+  paidDate?: string | null,
+): Promise<ActionState> {
   const supabase = await createClient()
   const { error } = await supabase
     .from('accounts_payable')
-    .update({
-      status: paid ? 'pago' : 'pendente',
-      paid_at: paid ? new Date().toISOString() : null,
-    })
+    .update({ status: paid ? 'pago' : 'pendente', paid_at: resolvePaidAt(paid, paidDate) })
     .eq('id', payableId)
   if (error) return { success: false, message: `Erro: ${error.message}` }
 

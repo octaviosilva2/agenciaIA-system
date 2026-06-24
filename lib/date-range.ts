@@ -54,6 +54,34 @@ export function parseDateOnly(value: string): Date {
   return new Date(y!, (m ?? 1) - 1, d ?? 1, 0, 0, 0, 0)
 }
 
+/** 'yyyy-MM-dd' do DIA (em Brasília) em que um instante ISO caiu. */
+export function spYmdFromISO(iso: string): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: SP_TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date(iso))
+}
+
+/**
+ * Converte um timestamp ISO (instante, ex.: `paid_at`) na Date local 00:00 do DIA
+ * em que ele caiu em Brasília. Usado para reconhecer receita/despesa pela data de
+ * PAGAMENTO (regime de caixa) sem que o fuso empurre o lançamento para o dia errado.
+ */
+export function spDateOnlyFromISO(iso: string): Date {
+  return parseDateOnly(spYmdFromISO(iso))
+}
+
+/**
+ * Converte uma data escolhida (`yyyy-MM-dd`) no INSTANTE de pagamento a gravar em
+ * `paid_at`. Fixa meio-dia UTC para que, lido em Brasília (UTC−3), continue caindo
+ * no mesmo dia — evita que o fuso empurre o lançamento para a véspera/dia seguinte.
+ */
+export function paymentInstantFromYmd(ymd: string): string {
+  return new Date(`${ymd}T12:00:00.000Z`).toISOString()
+}
+
 /** Intervalo [from, to] de um período canônico, em Brasília. */
 export function periodRange(period: PeriodKey): DateRange {
   const today = spStartOfToday()

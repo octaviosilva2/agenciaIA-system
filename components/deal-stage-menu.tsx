@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { format } from 'date-fns'
 import { toast } from 'sonner'
 import { Check, CheckCircle2, Clock, Ban, XCircle } from 'lucide-react'
 import {
@@ -48,6 +49,11 @@ const inputCls =
 const textareaCls =
   'w-full rounded-md border border-border bg-card px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring'
 
+/** Data de hoje em 'yyyy-MM-dd' (default dos seletores de data). */
+function todayISO(): string {
+  return format(new Date(), 'yyyy-MM-dd')
+}
+
 /** Não propagar o clique para a linha clicável (que navega para o detalhe). */
 function stop(e: { stopPropagation: () => void }) {
   e.stopPropagation()
@@ -84,10 +90,12 @@ export function DealStageMenu({
   // Modal: motivo ao perder
   const [lostOpen, setLostOpen] = useState(false)
   const [lostReason, setLostReason] = useState('')
+  const [lostDate, setLostDate] = useState(todayISO()) // data da perda (retroativa)
 
   // Modal: com/sem manutenção ao fechar (contexto projeto)
   const [closeOpen, setCloseOpen] = useState(false)
   const [maintenance, setMaintenance] = useState<'com' | 'sem'>('com')
+  const [closeDate, setCloseDate] = useState(todayISO()) // data do fechamento (retroativa)
 
   const targets = context === 'contato' ? CONTACT_TARGETS : PROJECT_TARGETS
 
@@ -167,7 +175,7 @@ export function DealStageMenu({
       return
     }
     setBusy(true)
-    const res = await loseDeal(dealId, lostReason)
+    const res = await loseDeal(dealId, lostReason, lostDate)
     setBusy(false)
     if (!res.success) {
       toast.error(res.message)
@@ -181,7 +189,7 @@ export function DealStageMenu({
   async function confirmClose() {
     const withMaintenance = maintenance === 'com'
     setBusy(true)
-    const res = await closeDeal(dealId, withMaintenance)
+    const res = await closeDeal(dealId, withMaintenance, closeDate)
     setBusy(false)
     if (!res.success) {
       toast.error(res.message)
@@ -334,6 +342,16 @@ export function DealStageMenu({
               />
               Sem manutenção
             </label>
+            <div className="pt-1">
+              <label className={labelCls} htmlFor="dsm_close_date">Data do fechamento</label>
+              <input
+                id="dsm_close_date"
+                type="date"
+                value={closeDate}
+                onChange={(e) => setCloseDate(e.target.value)}
+                className={inputCls}
+              />
+            </div>
           </div>
           <DialogFooter>
             <DialogClose render={<Button type="button" variant="outline">Cancelar</Button>} />
@@ -351,17 +369,29 @@ export function DealStageMenu({
             <DialogTitle>Marcar como perdido</DialogTitle>
             <DialogDescription>{name} — informe o motivo da perda.</DialogDescription>
           </DialogHeader>
-          <div>
-            <label className={labelCls} htmlFor="dsm_lost_reason">Motivo</label>
-            <textarea
-              id="dsm_lost_reason"
-              rows={3}
-              value={lostReason}
-              onChange={(e) => setLostReason(e.target.value)}
-              placeholder="Ex.: escolheu concorrente / sem orçamento"
-              className={textareaCls}
-              autoFocus
-            />
+          <div className="space-y-3">
+            <div>
+              <label className={labelCls} htmlFor="dsm_lost_reason">Motivo</label>
+              <textarea
+                id="dsm_lost_reason"
+                rows={3}
+                value={lostReason}
+                onChange={(e) => setLostReason(e.target.value)}
+                placeholder="Ex.: escolheu concorrente / sem orçamento"
+                className={textareaCls}
+                autoFocus
+              />
+            </div>
+            <div>
+              <label className={labelCls} htmlFor="dsm_lost_date">Data</label>
+              <input
+                id="dsm_lost_date"
+                type="date"
+                value={lostDate}
+                onChange={(e) => setLostDate(e.target.value)}
+                className={inputCls}
+              />
+            </div>
           </div>
           <DialogFooter>
             <DialogClose render={<Button type="button" variant="outline">Cancelar</Button>} />

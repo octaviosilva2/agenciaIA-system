@@ -1,6 +1,7 @@
 'use client'
 
 import { useActionState, useEffect, useRef } from 'react'
+import { format } from 'date-fns'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { createActivity } from '@/lib/actions/contact-profile'
@@ -10,6 +11,11 @@ import type { Database } from '@/lib/supabase/types'
 
 type ActivityType = Database['public']['Enums']['activity_type']
 const ACTIVITY_TYPES: ActivityType[] = ['nota', 'reuniao', 'ligacao', 'email', 'whatsapp', 'outro']
+
+/** Data de hoje em 'yyyy-MM-dd' (default do seletor). */
+function todayISO(): string {
+  return format(new Date(), 'yyyy-MM-dd')
+}
 
 const selectCls =
   'h-9 rounded-md border border-border bg-card px-2 text-sm outline-none focus:ring-2 focus:ring-ring'
@@ -34,11 +40,21 @@ export function ActivityForm({ companyId, dealId }: { companyId: string; dealId?
     <form ref={formRef} action={formAction} className="space-y-2">
       <input type="hidden" name="company_id" value={companyId} />
       {dealId && <input type="hidden" name="deal_id" value={dealId} />}
-      <select name="type" defaultValue="nota" className={selectCls} aria-label="Tipo de interação">
-        {ACTIVITY_TYPES.map((t) => (
-          <option key={t} value={t}>{ACTIVITY_TYPE_LABELS[t]}</option>
-        ))}
-      </select>
+      <div className="flex flex-wrap items-center gap-2">
+        <select name="type" defaultValue="nota" className={selectCls} aria-label="Tipo de interação">
+          {ACTIVITY_TYPES.map((t) => (
+            <option key={t} value={t}>{ACTIVITY_TYPE_LABELS[t]}</option>
+          ))}
+        </select>
+        {/* Data da interação (default hoje; permite registrar do passado) */}
+        <input
+          type="date"
+          name="occurred_at"
+          defaultValue={todayISO()}
+          className={selectCls}
+          aria-label="Data da interação"
+        />
+      </div>
       <textarea
         name="content"
         required

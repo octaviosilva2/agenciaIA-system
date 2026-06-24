@@ -212,7 +212,9 @@ export const CHARGE_METHOD_LABELS: Record<Enums['charge_method'], string> = {
 export const PAYABLE_CATEGORY_LABELS: Record<Enums['payable_category'], string> = {
   fixo: 'Fixo',
   variavel: 'Variável',
-  imposto: 'Imposto',
+  // A categoria `imposto` (valor do enum no banco) agrega impostos E taxa de cartão;
+  // exibida como "Taxas" para o usuário.
+  imposto: 'Taxas',
 }
 
 /**
@@ -224,7 +226,7 @@ export type MockPayableCategory = Enums['payable_category']
 export const NEW_PAYABLE_CATEGORY_LABELS: Record<MockPayableCategory, string> = {
   fixo: 'Fixo',
   variavel: 'Variável',
-  imposto: 'Imposto',
+  imposto: 'Taxas',
 }
 
 export const ACTIVITY_TYPE_LABELS: Record<Enums['activity_type'], string> = {

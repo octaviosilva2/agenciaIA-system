@@ -171,13 +171,14 @@ async function getImplementationSummary(): Promise<ImplementationSummary> {
     const { year, month0 } = currentMonthRange()
     const { data, error } = await supabase
       .from('projects')
-      .select('id, status, updated_at, deal:deals ( stage, archived_at )')
+      .select('id, status, completed_at, updated_at, deal:deals ( stage, archived_at )')
 
     if (error) throw new Error(error.message)
 
     type Row = {
       id: string
       status: Enums['project_status']
+      completed_at: string | null
       updated_at: string
       deal: { stage: string; archived_at: string | null } | { stage: string; archived_at: string | null }[] | null
     }
@@ -190,9 +191,10 @@ async function getImplementationSummary(): Promise<ImplementationSummary> {
     })
 
     const active = projects.filter((p) => p.status !== 'entregue').length
-    // Sem coluna de conclusão; usa updated_at como proxy do "entregue neste mês".
+    // "Entregue neste mês" pela data real de conclusão (completed_at); fallback a
+    // updated_at para projetos concluídos antes da coluna existir (migração 0019).
     const completedThisMonth = projects.filter(
-      (p) => p.status === 'entregue' && isInMonth(p.updated_at, year, month0),
+      (p) => p.status === 'entregue' && isInMonth(p.completed_at ?? p.updated_at, year, month0),
     ).length
 
     return { active, completedThisMonth }

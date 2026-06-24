@@ -88,8 +88,13 @@ export async function updateMaintenanceTask(
   if (!input.title.trim()) return { success: false, message: 'Informe um título.' }
 
   const supabase = await createClient()
-  const { data: prev } = await supabase.from('tasks').select('status').eq('id', id).single()
-  const wasDone = (prev as { status: TaskStatus } | null)?.status === 'done'
+  const { data: prev } = await supabase
+    .from('tasks')
+    .select('status, completed_at')
+    .eq('id', id)
+    .single()
+  const prevRow = prev as { status: TaskStatus; completed_at: string | null } | null
+  const wasDone = prevRow?.status === 'done'
 
   const { error } = await supabase
     .from('tasks')
@@ -101,6 +106,11 @@ export async function updateMaintenanceTask(
       due_date: input.dueDate,
       recurrence: input.recurrence,
       recurrence_day: input.recurrence === 'monthly' ? input.recurrenceDay : null,
+      // Preserva a conclusão existente; só marca/limpa na transição de status.
+      completed_at:
+        input.status === 'done'
+          ? (prevRow?.completed_at ?? new Date().toISOString())
+          : null,
     })
     .eq('id', id)
 
@@ -144,7 +154,10 @@ export async function moveMaintenanceTask(
   } | null
   const wasDone = t?.status === 'done'
 
-  const { error } = await supabase.from('tasks').update({ status }).eq('id', id)
+  const { error } = await supabase
+    .from('tasks')
+    .update({ status, completed_at: status === 'done' ? new Date().toISOString() : null })
+    .eq('id', id)
   if (error) return { success: false, message: `Erro ao mover tarefa: ${error.message}` }
 
   if (t && !wasDone && status === 'done' && t.recurrence === 'monthly' && t.recurrence_day) {

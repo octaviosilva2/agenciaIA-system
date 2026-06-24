@@ -2,13 +2,13 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
-import { Inbox, Pencil, Trash2 } from 'lucide-react'
+import { CheckCircle2, Circle, Inbox, Pencil, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { EntityBadge } from '@/components/ui/entity-badge'
-import { Checkbox } from '@/components/ui/checkbox'
 import { PeriodFilter, usePeriodDates } from '@/components/period-filter'
 import { NewAccountDialog } from '@/components/finance/new-account-dialog'
 import { EditAccountDialog } from '@/components/finance/edit-account-dialog'
+import { MarkPaidPopover } from '@/components/finance/mark-paid-popover'
 import {
   toggleChargePaid,
   togglePayablePaid,
@@ -28,7 +28,7 @@ import {
   isOverdue,
   type MockPayableCategory,
 } from '@/lib/format'
-import { parseDateOnly } from '@/lib/date-range'
+import { parseDateOnly, spDateOnlyFromISO } from '@/lib/date-range'
 
 import type { Charge, AccountPayable, AccountRow } from '@/lib/queries/finance'
 
@@ -133,12 +133,14 @@ export function AccountsView({
     })
   }
 
-  function handleToggleCharge(id: string, current: Charge['status']) {
-    run(() => toggleChargePaid(id, current !== 'pago'))
+  // `date` ('yyyy-MM-dd') só é passada ao MARCAR como pago/recebido (default hoje,
+  // mas permite retroagir). Ao reverter para pendente, fica indefinida.
+  function handleToggleCharge(id: string, current: Charge['status'], date?: string) {
+    run(() => toggleChargePaid(id, current !== 'pago', [], date ?? null))
   }
 
-  function handleTogglePayable(id: string, current: AccountPayable['status']) {
-    run(() => togglePayablePaid(id, current !== 'pago'))
+  function handleTogglePayable(id: string, current: AccountPayable['status'], date?: string) {
+    run(() => togglePayablePaid(id, current !== 'pago', date ?? null))
   }
 
   function addCharges(newCharges: Charge[]) {
@@ -216,17 +218,28 @@ export function AccountsView({
       })
     }
 
-    // Filtro por período de vencimento (date-only sem deslocar dia).
+    // Data de referência da linha: nas abas de pendentes (A Receber/A Pagar) é o
+    // VENCIMENTO; nas de realizado (Receita/Despesa) é a data de PAGAMENTO (caixa).
+    const refDate = (row: AccountRow): Date =>
+      !isPending && row.data.paid_at
+        ? spDateOnlyFromISO(row.data.paid_at)
+        : parseDateOnly(row.data.due_date)
+
+    // Filtro por período sobre a data de referência (date-only sem deslocar dia).
     const filtered = base.filter((row) => {
       if (!from && !to) return true
-      const due = parseDateOnly(row.data.due_date)
-      if (from && due < from) return false
-      if (to && due > to) return false
+      const d = refDate(row)
+      if (from && d < from) return false
+      if (to && d > to) return false
       return true
     })
 
-    // yyyy-MM-dd ordena lexicalmente = cronologicamente.
-    return filtered.sort((a, b) => a.data.due_date.localeCompare(b.data.due_date))
+    // Pendentes: vencimento ascendente (próximos primeiro). Realizado: pagamento
+    // descendente (mais recentes primeiro).
+    return filtered.sort((a, b) => {
+      const diff = refDate(a).getTime() - refDate(b).getTime()
+      return isPending ? diff : -diff
+    })
   }, [charges, payables, isReceivable, isPending, kindFilter, categoryFilter, situacaoFilter, from, to])
 
   const emptyMessage = 'Nenhuma conta neste filtro'
@@ -318,7 +331,7 @@ export function AccountsView({
               <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
                 <th className="px-3 py-2 font-medium">Descrição</th>
                 <th className="px-3 py-2 text-right font-medium">Valor</th>
-                <th className="px-3 py-2 font-medium">Vencimento</th>
+                <th className="px-3 py-2 font-medium">{isPending ? 'Vencimento' : 'Pagamento'}</th>
                 <th className="px-3 py-2 font-medium">Status</th>
                 <th className="w-28 px-3 py-2 font-medium">{baixaLabel}</th>
                 <th className="w-20 px-3 py-2 font-medium">Ações</th>
@@ -329,10 +342,11 @@ export function AccountsView({
                 <AccountTableRow
                   key={`${row.type}-${row.data.id}`}
                   row={row}
+                  showPaidDate={!isPending}
                   onTogglePaid={
                     row.type === 'receber'
-                      ? () => handleToggleCharge(row.data.id, row.data.status)
-                      : () => handleTogglePayable(row.data.id, row.data.status)
+                      ? (date?: string) => handleToggleCharge(row.data.id, row.data.status, date)
+                      : (date?: string) => handleTogglePayable(row.data.id, row.data.status, date)
                   }
                   onEdit={() => setEditingRow(row)}
                   onDelete={
@@ -363,12 +377,15 @@ export function AccountsView({
 /** Uma linha do extrato. */
 function AccountTableRow({
   row,
+  showPaidDate,
   onTogglePaid,
   onEdit,
   onDelete,
 }: {
   row: AccountRow
-  onTogglePaid: () => void
+  showPaidDate: boolean
+  /** `date` ('yyyy-MM-dd') ao marcar pago (default hoje); ausente ao reverter. */
+  onTogglePaid: (date?: string) => void
   onEdit: () => void
   onDelete: () => void
 }) {
@@ -376,6 +393,10 @@ function AccountTableRow({
   const paid = data.status === 'pago'
   const canceled = data.status === 'cancelado'
   const overdue = data.status === 'pendente' && isOverdue(data.due_date)
+
+  // Nas abas de realizado mostramos a data de PAGAMENTO; nas de pendentes, o VENCIMENTO.
+  const dateLabel =
+    showPaidDate && data.paid_at ? formatDate(data.paid_at) : formatDate(data.due_date)
 
   // Fornecedor (A Pagar/Despesa) ou origem (A Receber/Receita) como subtítulo.
   const supplierLabel = type === 'pagar' ? (data as AccountPayable).supplier : null
@@ -414,13 +435,13 @@ function AccountTableRow({
         {amountLabel}
       </td>
 
-      {/* Vencimento — vermelho quando atrasada */}
+      {/* Data — vencimento (pendente, vermelho se atrasada) ou pagamento (realizado) */}
       <td
         className={`px-3 py-2 ${
           overdue ? 'font-medium text-red-600 dark:text-red-400' : 'text-muted-foreground'
         }`}
       >
-        {formatDate(data.due_date)}
+        {dateLabel}
       </td>
 
       {/* Status — badge (com "Vencido" quando aplicável) */}
@@ -428,21 +449,36 @@ function AccountTableRow({
         <EntityBadge meta={overdue ? CHARGE_OVERDUE : CHARGE_STATUS[data.status]} />
       </td>
 
-      {/* Checkbox de baixa inline — some quando cancelada */}
+      {/* Baixa inline — popover com data ao marcar; clique direto ao reverter */}
       <td className="px-3 py-2">
         {canceled ? (
           <span className="text-xs text-muted-foreground">—</span>
+        ) : paid ? (
+          <button
+            type="button"
+            onClick={() => onTogglePaid()}
+            title={type === 'pagar' ? 'Desmarcar pagamento' : 'Desmarcar recebimento'}
+            className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground"
+          >
+            <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
+            {type === 'pagar' ? 'Pago' : 'Recebido'}
+          </button>
         ) : (
-          <label className="flex cursor-pointer items-center gap-2">
-            <Checkbox
-              checked={paid}
-              onCheckedChange={onTogglePaid}
-              aria-label={type === 'pagar' ? 'Marcar como pago' : 'Marcar como recebido'}
-            />
-            <span className="text-xs text-muted-foreground">
-              {type === 'pagar' ? 'Pago' : 'Recebido'}
-            </span>
-          </label>
+          <MarkPaidPopover
+            title={type === 'pagar' ? 'Marcar como pago' : 'Marcar como recebido'}
+            confirmLabel={type === 'pagar' ? 'Pago' : 'Recebido'}
+            onConfirm={(date) => onTogglePaid(date)}
+            trigger={
+              <button
+                type="button"
+                aria-label={type === 'pagar' ? 'Marcar como pago' : 'Marcar como recebido'}
+                className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground hover:text-foreground"
+              >
+                <Circle className="h-4 w-4" />
+                {type === 'pagar' ? 'Pago' : 'Recebido'}
+              </button>
+            }
+          />
         )}
       </td>
 

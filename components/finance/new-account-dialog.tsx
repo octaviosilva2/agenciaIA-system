@@ -17,6 +17,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { chargeSchema, accountPayableSchema } from '@/lib/validations/finance'
+import { paymentInstantFromYmd } from '@/lib/date-range'
 import {
   CHARGE_METHOD_LABELS,
   NEW_PAYABLE_CATEGORY_LABELS,
@@ -144,6 +145,7 @@ export function NewAccountDialog({
   const [method, setMethod] = useState('')
   const [cardFeeRate, setCardFeeRate] = useState('2.5') // taxa maquininha (%)
   const [alreadyPaid, setAlreadyPaid] = useState(false)
+  const [paidDate, setPaidDate] = useState(todayISO()) // data de pagamento (retroativa)
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   // --- A Receber ---
@@ -203,6 +205,7 @@ export function NewAccountDialog({
     setMethod('')
     setCardFeeRate('2.5')
     setAlreadyPaid(false)
+    setPaidDate(todayISO())
     setErrors({})
     setReceberTipo('avulso')
     setImplPagamento('avista')
@@ -225,7 +228,9 @@ export function NewAccountDialog({
     if (!description.trim()) { setErrors({ description: 'Descrição é obrigatória' }); return }
     if (isNaN(amountNum) || amountNum <= 0) { setErrors({ amount: 'Valor inválido' }); return }
 
-    const paidAt = alreadyPaid ? new Date().toISOString() : null
+    // Quando "já pago/recebido", reconhece na data escolhida (default hoje, mas
+    // permite retroagir); senão, fica pendente sem data.
+    const paidAt = alreadyPaid ? paymentInstantFromYmd(paidDate) : null
     const status = alreadyPaid ? ('pago' as const) : ('pendente' as const)
 
     // ==============================
@@ -349,7 +354,7 @@ export function NewAccountDialog({
         const feePayables: AccountPayable[] = charges.map((charge) => ({
           id: `auto-card-fee-${charge.id}`,
           description: `Taxa maquininha (${cardFeeRate}%) — ${charge.description}`,
-          category: 'variavel' as const,
+          category: 'imposto' as const,
           amount: charge.amount * (feeRate / 100),
           due_date: charge.due_date,
           status,
@@ -782,16 +787,30 @@ export function NewAccountDialog({
                     )}
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    A taxa será lançada como despesa variável automaticamente.
+                    A taxa será lançada como despesa na categoria Taxas automaticamente.
                   </p>
                 </div>
               )}
 
-              {/* Já recebido */}
-              <label className="flex cursor-pointer items-center gap-2 text-sm">
-                <Checkbox checked={alreadyPaid} onCheckedChange={(v) => setAlreadyPaid(v === true)} />
-                <span>Lançar como já recebido</span>
-              </label>
+              {/* Já recebido + data de recebimento (retroativa) */}
+              <div className="space-y-2">
+                <label className="flex cursor-pointer items-center gap-2 text-sm">
+                  <Checkbox checked={alreadyPaid} onCheckedChange={(v) => setAlreadyPaid(v === true)} />
+                  <span>Lançar como já recebido</span>
+                </label>
+                {alreadyPaid && (
+                  <div>
+                    <label className={labelCls} htmlFor="na_paid_date_receber">Data de recebimento</label>
+                    <input
+                      id="na_paid_date_receber"
+                      type="date"
+                      value={paidDate}
+                      onChange={(e) => setPaidDate(e.target.value)}
+                      className={`${inputCls} w-44`}
+                    />
+                  </div>
+                )}
+              </div>
             </>
           )}
 
@@ -920,11 +939,25 @@ export function NewAccountDialog({
                 </div>
               )}
 
-              {/* Já pago */}
-              <label className="flex cursor-pointer items-center gap-2 text-sm">
-                <Checkbox checked={alreadyPaid} onCheckedChange={(v) => setAlreadyPaid(v === true)} />
-                <span>Lançar como já pago</span>
-              </label>
+              {/* Já pago + data de pagamento (retroativa) */}
+              <div className="space-y-2">
+                <label className="flex cursor-pointer items-center gap-2 text-sm">
+                  <Checkbox checked={alreadyPaid} onCheckedChange={(v) => setAlreadyPaid(v === true)} />
+                  <span>Lançar como já pago</span>
+                </label>
+                {alreadyPaid && (
+                  <div>
+                    <label className={labelCls} htmlFor="na_paid_date_pagar">Data de pagamento</label>
+                    <input
+                      id="na_paid_date_pagar"
+                      type="date"
+                      value={paidDate}
+                      onChange={(e) => setPaidDate(e.target.value)}
+                      className={`${inputCls} w-44`}
+                    />
+                  </div>
+                )}
+              </div>
             </>
           )}
         </div>

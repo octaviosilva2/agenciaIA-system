@@ -42,3 +42,6 @@ next-env.d.ts
 
 # supabase (lixo temporário do CLI)
 supabase/.temp/
+
+# logs de desenvolvimento local
+dev.log

@@ -1,6 +1,7 @@
 'use client'
 
 import { useActionState, useEffect, useRef, useState } from 'react'
+import { format } from 'date-fns'
 import { toast } from 'sonner'
 import { Plus } from 'lucide-react'
 import {
@@ -99,6 +100,17 @@ export function NewOpportunityDialog({ contacts }: { contacts: CompanyOption[] }
               name="estimated_value"
               inputMode="decimal"
               placeholder="Ex.: 18000"
+              className={inputCls}
+            />
+          </div>
+
+          <div>
+            <label className={labelCls} htmlFor="created_at">Data de criação</label>
+            <input
+              id="created_at"
+              name="created_at"
+              type="date"
+              defaultValue={format(new Date(), 'yyyy-MM-dd')}
               className={inputCls}
             />
           </div>

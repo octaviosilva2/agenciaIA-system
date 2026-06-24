@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { addMonths, format, parseISO } from 'date-fns'
 import { createClient } from '@/lib/supabase/server'
+import { paymentInstantFromYmd } from '@/lib/date-range'
 import { validateStageTransition, canDisqualify, type DealStage } from '@/lib/rules/deal-stage'
 import {
   setProjectPayment,
@@ -29,9 +30,28 @@ function num(v: FormDataEntryValue | null): number | null {
   return Number.isFinite(n) ? n : null
 }
 
-/** Grava o evento de estágio (alimenta a página Funil). created_by fica null (profiles pode estar vazia). */
-async function recordEvent(supabase: ServerClient, dealId: string, stage: DealStage) {
-  await supabase.from('deal_stage_events').insert({ deal_id: dealId, stage })
+/**
+ * Instante de um evento/desfecho a partir da data ('yyyy-MM-dd') escolhida na UI.
+ * Sem data → agora (data do clique); com data → meio-dia (não cruza o fuso),
+ * permitindo registrar transições/fechamentos retroativos.
+ */
+function eventInstant(date?: string | null): string {
+  return date ? paymentInstantFromYmd(date) : new Date().toISOString()
+}
+
+/**
+ * Grava o evento de estágio (alimenta a página Funil). created_by fica null
+ * (profiles pode estar vazia). `enteredAt` (ISO) permite datar a transição no passado.
+ */
+async function recordEvent(
+  supabase: ServerClient,
+  dealId: string,
+  stage: DealStage,
+  enteredAt?: string,
+) {
+  await supabase
+    .from('deal_stage_events')
+    .insert({ deal_id: dealId, stage, ...(enteredAt ? { entered_at: enteredAt } : {}) })
 }
 
 /** Revalida as duas telas que compartilham os deals → reflexo automático. */
@@ -58,8 +78,12 @@ async function fetchDeal(supabase: ServerClient, dealId: string): Promise<DealRo
   return data as unknown as DealRow
 }
 
-/** Move um deal entre estágios ativos (drag no kanban). */
-export async function changeDealStage(dealId: string, target: DealStage): Promise<ActionState> {
+/** Move um deal entre estágios ativos (drag no kanban). `date` data a transição. */
+export async function changeDealStage(
+  dealId: string,
+  target: DealStage,
+  date?: string,
+): Promise<ActionState> {
   const supabase = await createClient()
   const deal = await fetchDeal(supabase, dealId)
   if (!deal) return { success: false, message: 'Negócio não encontrado.' }
@@ -80,7 +104,7 @@ export async function changeDealStage(dealId: string, target: DealStage): Promis
     .eq('id', dealId)
   if (error) return { success: false, message: `Erro ao mover: ${error.message}` }
 
-  await recordEvent(supabase, dealId, target)
+  await recordEvent(supabase, dealId, target, eventInstant(date))
   revalidateBoards()
   return { success: true, message: 'Estágio atualizado.' }
 }
@@ -90,6 +114,7 @@ export async function createProjectAndAdvance(
   dealId: string,
   name: string,
   description: string,
+  date?: string,
 ): Promise<ActionState> {
   if (!name.trim()) return { success: false, message: 'Informe o nome do projeto.' }
 
@@ -115,13 +140,17 @@ export async function createProjectAndAdvance(
     .eq('id', dealId)
   if (error) return { success: false, message: `Erro ao mover: ${error.message}` }
 
-  await recordEvent(supabase, dealId, 'oportunidade')
+  await recordEvent(supabase, dealId, 'oportunidade', eventInstant(date))
   revalidateBoards()
   return { success: true, message: 'Projeto criado · negócio em Oportunidade.' }
 }
 
 /** Fecha o negócio (com/sem manutenção) e cria a cobrança de setup (idempotente). */
-export async function closeDeal(dealId: string, hasMaintenance: boolean): Promise<ActionState> {
+export async function closeDeal(
+  dealId: string,
+  hasMaintenance: boolean,
+  date?: string,
+): Promise<ActionState> {
   const supabase = await createClient()
   const deal = await fetchDeal(supabase, dealId)
   if (!deal) return { success: false, message: 'Negócio não encontrado.' }
@@ -129,13 +158,14 @@ export async function closeDeal(dealId: string, hasMaintenance: boolean): Promis
   const check = validateStageTransition(deal.stage, 'fechado', deal.projects.length > 0)
   if (!check.valid) return { success: false, message: check.error ?? 'Transição inválida.' }
 
+  const closedAt = eventInstant(date)
   const { error } = await supabase
     .from('deals')
-    .update({ stage: 'fechado', has_maintenance: hasMaintenance, closed_at: new Date().toISOString() })
+    .update({ stage: 'fechado', has_maintenance: hasMaintenance, closed_at: closedAt })
     .eq('id', dealId)
   if (error) return { success: false, message: `Erro ao fechar: ${error.message}` }
 
-  await recordEvent(supabase, dealId, 'fechado')
+  await recordEvent(supabase, dealId, 'fechado', closedAt)
 
   // Charge setup: consultar-antes-de-criar (idempotente por projeto).
   const project = deal.projects[0] ?? null
@@ -147,7 +177,8 @@ export async function closeDeal(dealId: string, hasMaintenance: boolean): Promis
       .eq('kind', 'setup')
       .limit(1)
     if (!existing || existing.length === 0) {
-      const due = new Date()
+      // Vencimento 7 dias após o fechamento (base = data escolhida ou hoje).
+      const due = date ? parseISO(date) : new Date()
       due.setDate(due.getDate() + 7)
       await supabase.from('charges').insert({
         company_id: deal.company_id,
@@ -155,7 +186,7 @@ export async function closeDeal(dealId: string, hasMaintenance: boolean): Promis
         description: `Setup ${project.name}`,
         kind: 'setup',
         amount: deal.estimated_value ?? 0,
-        due_date: due.toISOString().slice(0, 10),
+        due_date: format(due, 'yyyy-MM-dd'),
         status: 'pendente',
       })
     }
@@ -210,6 +241,7 @@ export async function closeDealWithSetup(
   dealId: string,
   payment: ClosePaymentInput,
   maintenance: CloseMaintenanceInput,
+  date?: string,
 ): Promise<ActionState> {
   const supabase = await createClient()
   const deal = await fetchDeal(supabase, dealId)
@@ -226,13 +258,14 @@ export async function closeDealWithSetup(
 
   const hasMaintenance = maintenance.kind !== 'none'
 
-  // 1. Marca o negócio como fechado.
+  // 1. Marca o negócio como fechado (na data escolhida ou hoje).
+  const closedAt = eventInstant(date)
   const { error } = await supabase
     .from('deals')
-    .update({ stage: 'fechado', has_maintenance: hasMaintenance, closed_at: new Date().toISOString() })
+    .update({ stage: 'fechado', has_maintenance: hasMaintenance, closed_at: closedAt })
     .eq('id', dealId)
   if (error) return { success: false, message: `Erro ao fechar: ${error.message}` }
-  await recordEvent(supabase, dealId, 'fechado')
+  await recordEvent(supabase, dealId, 'fechado', closedAt)
 
   // 2. Popula o pagamento (reusa a action existente; ela revalida o Financeiro).
   const installments = buildInstallments(payment)
@@ -265,38 +298,40 @@ export async function closeDealWithSetup(
   return { success: true, message: `Negócio fechado${hasMaintenance ? ' com manutenção' : ''}.` }
 }
 
-/** Marca como perdido (exige motivo). */
-export async function loseDeal(dealId: string, reason: string): Promise<ActionState> {
+/** Marca como perdido (exige motivo). `date` data o desfecho. */
+export async function loseDeal(dealId: string, reason: string, date?: string): Promise<ActionState> {
   if (!reason.trim()) return { success: false, message: 'Informe o motivo da perda.' }
 
   const supabase = await createClient()
+  const closedAt = eventInstant(date)
   const { error } = await supabase
     .from('deals')
-    .update({ stage: 'perdido', lost_reason: reason.trim(), closed_at: new Date().toISOString() })
+    .update({ stage: 'perdido', lost_reason: reason.trim(), closed_at: closedAt })
     .eq('id', dealId)
   if (error) return { success: false, message: `Erro: ${error.message}` }
 
-  await recordEvent(supabase, dealId, 'perdido')
+  await recordEvent(supabase, dealId, 'perdido', closedAt)
   revalidateBoards()
   return { success: true, message: 'Negócio marcado como Perdido.' }
 }
 
-/** Marca para reativar futuramente. */
-export async function reactivateDeal(dealId: string): Promise<ActionState> {
+/** Marca para reativar futuramente. `date` data o desfecho. */
+export async function reactivateDeal(dealId: string, date?: string): Promise<ActionState> {
   const supabase = await createClient()
+  const closedAt = eventInstant(date)
   const { error } = await supabase
     .from('deals')
-    .update({ stage: 'reativar_futuramente', closed_at: new Date().toISOString() })
+    .update({ stage: 'reativar_futuramente', closed_at: closedAt })
     .eq('id', dealId)
   if (error) return { success: false, message: `Erro: ${error.message}` }
 
-  await recordEvent(supabase, dealId, 'reativar_futuramente')
+  await recordEvent(supabase, dealId, 'reativar_futuramente', closedAt)
   revalidateBoards()
   return { success: true, message: 'Negócio marcado como Reativar.' }
 }
 
-/** Desqualifica (só a partir de Prospect ou Lead). */
-export async function disqualifyDeal(dealId: string): Promise<ActionState> {
+/** Desqualifica (só a partir de Prospect ou Lead). `date` data o desfecho. */
+export async function disqualifyDeal(dealId: string, date?: string): Promise<ActionState> {
   const supabase = await createClient()
   const deal = await fetchDeal(supabase, dealId)
   if (!deal) return { success: false, message: 'Negócio não encontrado.' }
@@ -305,13 +340,14 @@ export async function disqualifyDeal(dealId: string): Promise<ActionState> {
     return { success: false, message: 'Só é possível desqualificar em Prospect ou Lead.' }
   }
 
+  const closedAt = eventInstant(date)
   const { error } = await supabase
     .from('deals')
-    .update({ stage: 'desqualificado', closed_at: new Date().toISOString() })
+    .update({ stage: 'desqualificado', closed_at: closedAt })
     .eq('id', dealId)
   if (error) return { success: false, message: `Erro: ${error.message}` }
 
-  await recordEvent(supabase, dealId, 'desqualificado')
+  await recordEvent(supabase, dealId, 'desqualificado', closedAt)
   revalidateBoards()
   return { success: true, message: 'Negócio desqualificado.' }
 }
@@ -325,6 +361,9 @@ export async function createOpportunity(
   const projectName = str(formData.get('project_name'))
   const description = str(formData.get('project_description'))
   const estimatedValue = num(formData.get('estimated_value'))
+  // Data de criação opcional (retroativa): registra a oportunidade no passado.
+  const createdYmd = str(formData.get('created_at'))
+  const createdAt = createdYmd ? eventInstant(createdYmd) : undefined
 
   if (!companyId) return { success: false, message: 'Selecione o contato.' }
   if (!projectName) return { success: false, message: 'Informe o nome do projeto.' }
@@ -332,7 +371,14 @@ export async function createOpportunity(
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('deals')
-    .insert({ company_id: companyId, title: projectName, stage: 'oportunidade', estimated_value: estimatedValue })
+    .insert({
+      company_id: companyId,
+      title: projectName,
+      stage: 'oportunidade',
+      estimated_value: estimatedValue,
+      // Omitido (undefined) → DB usa default now(); preenchido em lançamento retroativo.
+      created_at: createdAt,
+    })
     .select('id')
     .single()
   if (error || !data) return { success: false, message: `Erro ao criar negócio: ${error?.message ?? ''}` }
@@ -347,7 +393,7 @@ export async function createOpportunity(
   })
   if (projErr) return { success: false, message: `Erro ao criar projeto: ${projErr.message}` }
 
-  await recordEvent(supabase, deal.id, 'oportunidade')
+  await recordEvent(supabase, deal.id, 'oportunidade', createdAt)
   revalidateBoards()
   return { success: true, message: 'Oportunidade criada.' }
 }

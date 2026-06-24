@@ -66,8 +66,10 @@ export function OpportunityActions({
   const router = useRouter()
   const [busy, setBusy] = useState(false)
   const [closeOpen, setCloseOpen] = useState(false)
+  const [closeDate, setCloseDate] = useState(todayISO()) // data do fechamento (retroativa)
   const [lostOpen, setLostOpen] = useState(false)
   const [lostReason, setLostReason] = useState('')
+  const [lostDate, setLostDate] = useState(todayISO()) // data da perda (retroativa)
 
   // --- Estado do wizard de fechamento ---
   // Implementação (pagamento)
@@ -142,6 +144,7 @@ export function OpportunityActions({
         dealId,
         { total, mode: payMode, count: payCount, firstDate: payFirst, method: payMethod },
         maintenance,
+        closeDate,
       ),
     )
   }
@@ -194,6 +197,18 @@ export function OpportunityActions({
           </DialogHeader>
 
           <div className="max-h-[60vh] space-y-5 overflow-y-auto pr-1">
+            {/* Data do fechamento (default hoje; permite registrar negócio fechado no passado) */}
+            <div>
+              <label className={labelCls} htmlFor="close_date">Data do fechamento</label>
+              <input
+                id="close_date"
+                type="date"
+                value={closeDate}
+                onChange={(e) => setCloseDate(e.target.value)}
+                className={inputCls}
+              />
+            </div>
+
             {/* Implementação */}
             <section className="space-y-3">
               <h4 className="text-sm font-semibold">Implementação</h4>
@@ -409,17 +424,29 @@ export function OpportunityActions({
             <DialogTitle>Marcar como perdido</DialogTitle>
             <DialogDescription>Informe o motivo da perda.</DialogDescription>
           </DialogHeader>
-          <div>
-            <label className={labelCls} htmlFor="detail_lost_reason">Motivo</label>
-            <textarea
-              id="detail_lost_reason"
-              rows={3}
-              value={lostReason}
-              onChange={(e) => setLostReason(e.target.value)}
-              placeholder="Ex.: escolheu concorrente / sem orçamento"
-              className={textareaCls}
-              autoFocus
-            />
+          <div className="space-y-3">
+            <div>
+              <label className={labelCls} htmlFor="detail_lost_reason">Motivo</label>
+              <textarea
+                id="detail_lost_reason"
+                rows={3}
+                value={lostReason}
+                onChange={(e) => setLostReason(e.target.value)}
+                placeholder="Ex.: escolheu concorrente / sem orçamento"
+                className={textareaCls}
+                autoFocus
+              />
+            </div>
+            <div>
+              <label className={labelCls} htmlFor="detail_lost_date">Data</label>
+              <input
+                id="detail_lost_date"
+                type="date"
+                value={lostDate}
+                onChange={(e) => setLostDate(e.target.value)}
+                className={inputCls}
+              />
+            </div>
           </div>
           <DialogFooter>
             <DialogClose render={<Button type="button" variant="outline">Cancelar</Button>} />
@@ -433,7 +460,7 @@ export function OpportunityActions({
                   return
                 }
                 setLostOpen(false)
-                void run(loseDeal(dealId, lostReason))
+                void run(loseDeal(dealId, lostReason, lostDate))
               }}
             >
               Marcar perdido

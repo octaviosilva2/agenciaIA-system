@@ -53,6 +53,10 @@ export async function updateImplementationTask(
   if (!input.title.trim()) return { success: false, message: 'Informe um título.' }
 
   const supabase = await createClient()
+  // Preserva a data de conclusão existente; só marca/limpa na transição de status.
+  const { data: prev } = await supabase.from('tasks').select('completed_at').eq('id', id).single()
+  const prevCompleted = (prev as { completed_at: string | null } | null)?.completed_at ?? null
+
   const { error } = await supabase
     .from('tasks')
     .update({
@@ -61,6 +65,7 @@ export async function updateImplementationTask(
       status: input.status,
       priority: input.priority,
       due_date: input.dueDate,
+      completed_at: input.status === 'done' ? (prevCompleted ?? new Date().toISOString()) : null,
     })
     .eq('id', id)
 
@@ -70,14 +75,17 @@ export async function updateImplementationTask(
   return { success: true, message: 'Tarefa atualizada.' }
 }
 
-/** Move uma tarefa de implementação de coluna (status). */
+/** Move uma tarefa de implementação de coluna (status). Datas a conclusão ao entrar em 'done'. */
 export async function moveImplementationTask(
   projectId: string,
   id: string,
   status: TaskStatus,
 ): Promise<ActionState> {
   const supabase = await createClient()
-  const { error } = await supabase.from('tasks').update({ status }).eq('id', id)
+  const { error } = await supabase
+    .from('tasks')
+    .update({ status, completed_at: status === 'done' ? new Date().toISOString() : null })
+    .eq('id', id)
   if (error) return { success: false, message: `Erro ao mover tarefa: ${error.message}` }
 
   revalidatePath(`/implementacao/${projectId}`)

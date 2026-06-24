@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { ArrowUpRight, ChevronDown } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { formatCurrency, type MockPayableCategory } from '@/lib/format'
-import { resolvePeriodRange, parseDateOnly } from '@/lib/date-range'
+import { resolvePeriodRange, parseDateOnly, spDateOnlyFromISO } from '@/lib/date-range'
 import { calculateNetRevenue } from '@/lib/rules/net-revenue'
 import type { AccountPayable, Charge } from '@/lib/queries/finance'
 
@@ -29,7 +29,7 @@ type ChartGranularity =
 type ChartBar = { label: string; paid: number; overdue: number; upcoming: number }
 type ProfitBar = { label: string; value: number }
 type ChargeKind = 'recorrencia' | 'avulso' | 'setup'
-type BarItem = { status: string; due_date: string; amount: number }
+type BarItem = { status: string; due_date: string; amount: number; paid_at: string | null }
 
 // --- Constantes ---
 
@@ -69,7 +69,7 @@ const REVENUE_FILTERS: Array<{ id: ChargeKind; label: string }> = [
 const EXPENSE_FILTERS: Array<{ id: MockPayableCategory; label: string }> = [
   { id: 'fixo', label: 'Fixo' },
   { id: 'variavel', label: 'Variável' },
-  { id: 'imposto', label: 'Imposto' },
+  { id: 'imposto', label: 'Taxas' },
 ]
 
 // --- Helpers ---
@@ -77,6 +77,16 @@ const EXPENSE_FILTERS: Array<{ id: MockPayableCategory; label: string }> = [
 function inRange(date: string, from: Date | null, to: Date | null): boolean {
   if (!from && !to) return true
   const d = parseDateOnly(date) // date-only sem deslocar dia
+  if (from && d < from) return false
+  if (to && d > to) return false
+  return true
+}
+
+/** Igual a inRange, mas para o INSTANTE de pagamento (paid_at) → dia em Brasília. */
+function paidInRange(paidAt: string | null, from: Date | null, to: Date | null): boolean {
+  if (paidAt == null) return false
+  if (!from && !to) return true
+  const d = spDateOnlyFromISO(paidAt)
   if (from && d < from) return false
   if (to && d > to) return false
   return true
@@ -152,11 +162,18 @@ function computeBars(items: BarItem[], granularity: ChartGranularity): ChartBar[
     let paid = 0, overdue = 0, upcoming = 0
     for (const item of items) {
       if (item.status === 'cancelado') continue
-      const due = parseDateOnly(item.due_date) // date-only sem deslocar dia
-      if (due < from || due > to) continue
-      if (item.status === 'pago') paid += item.amount
-      else if (due < today) overdue += item.amount
-      else upcoming += item.amount
+      if (item.status === 'pago') {
+        // Realizado entra no período pela data de PAGAMENTO (regime de caixa).
+        const ref = item.paid_at ? spDateOnlyFromISO(item.paid_at) : parseDateOnly(item.due_date)
+        if (ref < from || ref > to) continue
+        paid += item.amount
+      } else {
+        // Pendente entra pelo VENCIMENTO; vencido × a vencer pela data de hoje.
+        const due = parseDateOnly(item.due_date)
+        if (due < from || due > to) continue
+        if (due < today) overdue += item.amount
+        else upcoming += item.amount
+      }
     }
     return { label, paid, overdue, upcoming }
   })
@@ -253,18 +270,26 @@ export function FinanceiroView({ allCharges, allPayables, taxRate, cardFeeRate }
       kpiPeriod === 'personalizado'
         ? resolvePeriodRange('personalizado', customFrom || null, customTo || null)
         : resolvePeriodRange(kpiPeriod)
-    const charges = allCharges.filter((c) => c.status !== 'cancelado' && inRange(c.due_date, from, to))
-    const payables = allPayables.filter((p) => p.status !== 'cancelado' && inRange(p.due_date, from, to))
-    // Receita/despesa do período = só o CONFIRMADO (pago). O pendente/vencido fica
-    // em "a receber"/"a pagar". Assim o lucro reflete a variação de caixa do período.
-    const grossRevenue = charges.filter((c) => c.status === 'pago').reduce((s, c) => s + c.amount, 0)
-    const totalExpenses = payables.filter((p) => p.status === 'pago').reduce((s, p) => s + p.amount, 0)
+    const charges = allCharges.filter((c) => c.status !== 'cancelado')
+    const payables = allPayables.filter((p) => p.status !== 'cancelado')
+    // Receita/despesa do período = só o CONFIRMADO (pago), reconhecido na data de
+    // PAGAMENTO (regime de caixa). O pendente entra por VENCIMENTO em "a receber/pagar".
+    const grossRevenue = charges
+      .filter((c) => c.status === 'pago' && paidInRange(c.paid_at, from, to))
+      .reduce((s, c) => s + c.amount, 0)
+    const totalExpenses = payables
+      .filter((p) => p.status === 'pago' && paidInRange(p.paid_at, from, to))
+      .reduce((s, p) => s + p.amount, 0)
     return {
       grossRevenue,
       totalExpenses,
       profit: grossRevenue - totalExpenses,
-      toReceive: charges.filter((c) => c.status === 'pendente').reduce((s, c) => s + c.amount, 0),
-      toPay: payables.filter((p) => p.status === 'pendente').reduce((s, p) => s + p.amount, 0),
+      toReceive: charges
+        .filter((c) => c.status === 'pendente' && inRange(c.due_date, from, to))
+        .reduce((s, c) => s + c.amount, 0),
+      toPay: payables
+        .filter((p) => p.status === 'pendente' && inRange(p.due_date, from, to))
+        .reduce((s, p) => s + p.amount, 0),
     }
   }, [allCharges, allPayables, kpiPeriod, customFrom, customTo])
 

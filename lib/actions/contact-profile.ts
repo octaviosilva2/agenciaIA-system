@@ -4,12 +4,24 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { activitySchema } from '@/lib/validations/company'
 import { diagnosticSchema } from '@/lib/validations/deal'
+import { paymentInstantFromYmd, spYmdFromISO } from '@/lib/date-range'
 import type { ActionState } from '@/lib/actions/action-state'
 
 function str(v: FormDataEntryValue | null): string | null {
   if (typeof v !== 'string') return null
   const t = v.trim()
   return t === '' ? null : t
+}
+
+/**
+ * Resolve o instante de uma interação a partir da data ('yyyy-MM-dd') escolhida no
+ * form. Se for hoje (ou vazia), usa o agora — preserva a HORA real na timeline.
+ * Se for uma data passada (retroativa), fixa meio-dia para não cruzar o fuso.
+ */
+function resolveOccurredAt(ymd: string | null): string | undefined {
+  if (!ymd) return undefined
+  const todayYmd = spYmdFromISO(new Date().toISOString())
+  return ymd === todayYmd ? new Date().toISOString() : paymentInstantFromYmd(ymd)
 }
 
 /** Registra uma interação (nota/reunião/ligação…) na timeline do contato. */
@@ -24,6 +36,7 @@ export async function createActivity(
     deal_id: dealId,
     type: str(formData.get('type')) ?? 'nota',
     content: str(formData.get('content')) ?? '',
+    occurred_at: resolveOccurredAt(str(formData.get('occurred_at'))),
   }
 
   const parsed = activitySchema.safeParse(raw)
@@ -41,6 +54,8 @@ export async function createActivity(
     deal_id: parsed.data.deal_id ?? null,
     type: parsed.data.type,
     content: parsed.data.content,
+    // Omitido (undefined) → DB usa o default now(); preenchido em lançamento retroativo.
+    occurred_at: parsed.data.occurred_at,
   })
   if (error) return { success: false, message: `Erro ao salvar: ${error.message}` }
 

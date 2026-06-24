@@ -66,9 +66,17 @@ export async function updateManagedTask(id: string, input: ManagedTaskInput): Pr
   if (!input.title.trim()) return { success: false, message: 'Informe um título.' }
 
   const supabase = await createClient()
+  // Preserva a conclusão existente; só marca/limpa na transição de status.
+  const { data: prev } = await supabase.from('tasks').select('completed_at').eq('id', id).single()
+  const prevCompleted = (prev as { completed_at: string | null } | null)?.completed_at ?? null
+
   const { error } = await supabase
     .from('tasks')
-    .update({ ...toRow(input), updated_at: new Date().toISOString() })
+    .update({
+      ...toRow(input),
+      completed_at: input.status === 'done' ? (prevCompleted ?? new Date().toISOString()) : null,
+      updated_at: new Date().toISOString(),
+    })
     .eq('id', id)
 
   if (error) return { success: false, message: `Erro ao salvar tarefa: ${error.message}` }
@@ -77,7 +85,7 @@ export async function updateManagedTask(id: string, input: ManagedTaskInput): Pr
   return { success: true, message: 'Tarefa atualizada.' }
 }
 
-/** Move uma tarefa de coluna (muda só o status). */
+/** Move uma tarefa de coluna (muda só o status). Datas a conclusão ao entrar em 'done'. */
 export async function moveManagedTask(
   id: string,
   status: TaskStatus,
@@ -86,7 +94,11 @@ export async function moveManagedTask(
   const supabase = await createClient()
   const { error } = await supabase
     .from('tasks')
-    .update({ status, updated_at: new Date().toISOString() })
+    .update({
+      status,
+      completed_at: status === 'done' ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    })
     .eq('id', id)
 
   if (error) return { success: false, message: `Erro ao mover tarefa: ${error.message}` }

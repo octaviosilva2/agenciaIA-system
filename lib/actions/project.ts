@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { addDays, format, parseISO } from 'date-fns'
 import { createClient } from '@/lib/supabase/server'
+import { paymentInstantFromYmd } from '@/lib/date-range'
 import { generateRecurrences } from '@/lib/rules/recurrence'
 import type { ActionState } from '@/lib/actions/action-state'
 import type { ScopeItem } from '@/lib/queries/opportunity-detail'
@@ -699,22 +700,33 @@ export async function updateProjectDueDate(
 
 /**
  * Atualiza o macro-status da implementação do projeto e grava o evento de fase.
- * Usado para marcar como entregue (concluído) ou reabrir.
+ * Usado para marcar como entregue (concluído) ou reabrir. `date` ('yyyy-MM-dd')
+ * permite registrar a conclusão numa data RETROATIVA: ao marcar `entregue`,
+ * grava `completed_at` (= data escolhida ou agora); ao reabrir, limpa `completed_at`.
  */
 export async function updateProjectStatus(
   projectId: string,
   dealId: string,
   status: ProjectStatus,
+  date?: string,
 ): Promise<ActionState> {
   const supabase = await createClient()
+
+  // Instante do evento/conclusão: data escolhida (meio-dia, não cruza fuso) ou agora.
+  const instant = date ? paymentInstantFromYmd(date) : new Date().toISOString()
+  // Só "entregue" carrega data de conclusão; qualquer outro status a zera (reabertura).
+  const completedAt = status === 'entregue' ? instant : null
+
   const { error } = await supabase
     .from('projects')
-    .update({ status })
+    .update({ status, completed_at: completedAt })
     .eq('id', projectId)
   if (error) return { success: false, message: `Erro ao atualizar status: ${error.message}` }
 
-  // Histórico de fases (automação do modelo de dados).
-  await supabase.from('project_stage_events').insert({ project_id: projectId, status })
+  // Histórico de fases (automação do modelo de dados), datado pelo mesmo instante.
+  await supabase
+    .from('project_stage_events')
+    .insert({ project_id: projectId, status, entered_at: instant })
 
   revalidateProject(dealId, projectId)
   return {
