@@ -1,83 +1,182 @@
 # 07 — Handover (estado atual e continuidade)
 
-> **Leia este documento ANTES de executar qualquer coisa.** Ele registra exatamente onde o projeto parou, o que já existe e funciona (não refazer), e como começar a Fase 2.
+> **Leia este documento antes de qualquer coisa.** Ele registra o que existe, como tudo funciona e como fazer mudanças com segurança.
 
-## 1. Onde estamos
+---
 
-- **Fases 0 e 1 estão concluídas e aprovadas** (GATE da Fase 1 passou). Commit de referência: `db14367`.
-- Depois da Fase 1, foi criado e **aprovado o design system do frontend** (`06-design-system.md` + `frontend-teste/`).
-- **Próximo passo:** Fase 2 — Comercial, começando pela **etapa 2.0** (alinhamento visual da fundação), conforme `05-roteiro.md`.
-- O banco Supabase **já existe e está aplicado** — não criar projeto novo, não reaplicar migrations. Credenciais em `.env.local` (gitignored).
+## 1. Estado do projeto
 
-## 2. O que já existe e FUNCIONA — não refazer
+**O sistema está completo.** Todas as fases do roteiro (0–6) foram concluídas, incluindo 3 ondas de ajustes e validação final.
 
-### Stack e fundação (Fase 0)
-- **Next.js 15+ (App Router)** na raiz do repo, TypeScript strict, Tailwind CSS v4, shadcn/ui.
-  - ⚠️ Esta versão do shadcn usa componentes `@base-ui` internamente: o padrão `asChild` foi substituído por `render={<Component />}`.
-- **Auth completa:** clients `@supabase/ssr` em `lib/supabase/` (`client.ts`, `server.ts`, `middleware.ts`); `/middleware.ts` protege tudo exceto `/login`; página `/login` funcional com Server Action.
-- **Layout do dashboard:** `app/layout.tsx` (PT-BR, TooltipProvider, Toaster/sonner) e `app/(dashboard)/layout.tsx` (SidebarProvider + header com e-mail do usuário e logout).
-- **Sidebar:** `components/app-sidebar.tsx` com a constante `NAV_GROUPS` (5 grupos). Todas as rotas do menu existem como **páginas placeholder** — substituí-las é exatamente o trabalho das Fases 2–6.
-- **Componentes base:** `components/period-filter.tsx` (filtro temporal global) + biblioteca shadcn em `components/ui/`.
-- **Vitest** configurado (`vitest.config.ts`); testes em `__tests__/`.
-- Utilitários instalados: `zod`, `date-fns`, `lucide-react`, `dnd-kit`.
-
-### Banco e domínio (Fase 1)
-- **7 migrations** aplicadas (`supabase/migrations/0001`–`0007`): enums, tabelas (`deals`, `companies`, `projects`, `tasks`, `contracts`, `charges`, `accounts_payable`, tabelas do NCT…), CHECK constraints, UNIQUE de idempotência em `charges (contract_id, due_date)`, seeds, índices.
-- **RLS habilitado em 100% das 17 tabelas**, policy `authenticated_all` (2 sócios, sem roles segmentadas). `get_advisors` rodado — só os warnings `always_true` esperados.
-- **Types espelhados do banco** em `lib/supabase/types.ts` (gerados via MCP).
-- **Zod schemas** em `lib/validations/` (`company.ts`, `deal.ts`, `project.ts`, `finance.ts`, `nct.ts`) — schema único por entidade, compartilhado entre form e server action.
-- **Regras puras** em `lib/rules/` — lógica de negócio sem I/O, **100% testada** (`__tests__/rules/`, suíte verde):
-  - `deal-stage.ts` — transições válidas do funil (desqualificado só de prospect/lead; perdido exige motivo; fechado exige has_maintenance; oportunidade exige projeto)
-  - `contact-status.ts` — estado derivado do contato (6 estados, nunca editado à mão)
-  - `recurrence.ts` — geração matemática das N parcelas de um contrato
-  - `net-revenue.ts` — receita líquida contra a alíquota
-- `lib/actions/action-state.ts` — tipo `ActionState` para `useActionState`.
-
-## 3. Design system (chegou DEPOIS da Fase 1)
-
-- **`06-design-system.md`** é o manual completo: tokens de cor, tipografia, receitas de classes, badges (§6.2 = mapeamento enum → label → tom) e regras de ouro.
-- **`frontend-teste/style-guide.html`** é a **verdade visual** (abrir no navegador; tem tema claro e escuro). Se o `.md` e o `.html` divergirem, o `.html` vence.
-- **`frontend-teste/index.html`** é um preview navegável de telas do CRM — serve de **inspiração de layout**, não de código a copiar (usa Tailwind CDN, só para visualização).
-- Regra registrada em `AGENTS.md` e no roteiro: **nenhuma UI nasce fora do design system**.
-
-## 4. Desalinhamentos conhecidos (corrigir na etapa 2.0)
-
-O frontend da Fase 0 foi feito **antes** do design system. Estes pontos divergem e são a primeira tarefa da Fase 2 — é **alinhamento visual**, não retrabalho funcional:
-
-| Item | Estado atual | Estado esperado (design system) |
+| Fase | Entrega | Status |
 |---|---|---|
-| `app/globals.css` | Tokens default do shadcn (oklch, fundo branco) | Tokens HSL zinc do §3 (ex.: background claro `240 5% 96%`) |
-| Fontes (`app/layout.tsx`) | Geist + Geist Mono | **Inter** + **JetBrains Mono** |
-| `lib/format.ts` | Labels prontos, mas: cores do funil coloridas (blue/cyan/violet…), sem variantes `dark:`, constantes separadas `_LABELS`/`_COLORS` | Funil em **escala slate**; tons claro+escuro do §6.1/§6.2; formato `{ label, className }` por enum consumido por `EntityBadge`; "Done" → "Concluída", "Reativar Futuramente" → "Reativar" |
-| `EntityBadge` | Não existe | Componente único que renderiza qualquer badge a partir do meta de `format.ts` (§7) |
-| Sidebar/header/login | Funcionais, estilo shadcn default | Alinhados ao `style-guide.html` |
+| 0 | Fundação: app, auth, layout, sidebar | ✅ |
+| 1 | Banco: migrations 0001–0007 + regras puras testadas | ✅ |
+| 2 | Comercial: contatos, projetos, funil | ✅ |
+| 3 | Operacional: implementação + manutenção + arquivar/excluir | ✅ |
+| 4 | Financeiro: contas + visão geral + config | ✅ |
+| 5 | Gestão: estratégia + NCT + tarefas board | ✅ |
+| 6 | Dashboard + funil + polimento | ✅ |
+| Ajustes Onda 1 | Quick wins (A1–A11) | ✅ |
+| Ajustes Onda 2 | Tarefas, datas, financeiro (B1–B8) | ✅ |
+| Ajustes Onda 3 | Projeto/fechamento/implementação/manutenção (C1–C6) | ✅ |
+| Validação final | Build + testes + advisors + smoke E2E | ✅ |
 
-**O que NÃO muda nesse alinhamento:** migrations, `lib/rules/`, `lib/validations/`, `lib/supabase/`, middleware, testes. São camadas de dados/domínio — o alinhamento é só visual (`format.ts` muda de forma, não de conteúdo semântico).
+**Migrations aplicadas:** 0001–0019 (próxima livre = **0020**).
+**Build:** 18 rotas dinâmicas, limpo.
+**Testes:** 59 verdes (`npm test`).
+**Banco:** projeto Supabase `czkcfhchsjtmmhtvethg`. RLS `authenticated_all` em todas as tabelas.
 
-## 5. Fluxo de trabalho da Fase 2 em diante — UI-first
+---
 
-Para **cada área/tela nova**:
+## 2. O que existe e funciona — não refazer
 
-1. **UI primeiro** — tela completa com dados mock, seguindo o design system.
-2. **Validação visual (mini-gate)** — humano aprova o visual antes de qualquer persistência.
-3. **Backend depois** — `lib/queries/`, server actions, Supabase e `lib/rules/` entram só após aprovação; o mock vira dado real sem mudar o layout.
-4. **Testes e aceite** — regras/validações novas testadas, build limpo.
+### Comercial
+- **`/contatos`**: lista + kanban (dnd-kit). Colunas pré-venda: Prospect → Lead → Diagnóstico → Oportunidade + terminais Desqualificado/Reativar. Criar contato já abre deal em Prospect. Busca e toggle Ativos/Arquivados só na lista. Múltiplos contatos por empresa (tabela `company_contacts`).
+- **`/contatos/[id]`**: perfil com Dados · Projetos · Diagnósticos · Interações. Header mostra estágio do deal mais recente.
+- **`/projetos`**: funil comercial completo (kanban/lista), Oportunidade → Negociação + terminais. Fechados continuam visíveis. "Fechar negócio" é um wizard (implementação: valor/parcelas/método; manutenção: mensal/avulsa/nenhuma).
+- **`/projetos/[id]`**: tela do projeto com PropEditor, EscopoEditor, blocos de Implementação (prazo + DeliveryControls) e Manutenção (MaintenanceEditor com parcelas).
+- **`/funil`**: relatórios sobre `deal_stage_events` com filtro temporal (KPIs, barras de conversão, win rate).
 
-Os GATEs de fase (`05-roteiro.md`) continuam por cima desses mini-gates.
+### Operacional
+- **`/implementacao`**: board dos projetos fechados por `project_status`. Link → `/implementacao/[id]`.
+- **`/implementacao/[id]`**: kanban de tarefas reais (`project_id`), escopo, etapas, prazo, marcar entregue/reabrir. Backend real (`lib/queries/implementation-detail.ts`, `lib/actions/tasks-impl.ts`).
+- **`/manutencao`**: board de contratos ativos, ordenado por `next_contact_date`. Link → `/manutencao/[contractId]`.
+- **`/manutencao/[contractId]`**: cobrança editável, kanban de tarefas de manutenção (com recorrência mensal), seção de relacionamento ("Contato dado" avança `next_contact_date`).
 
-## 6. Como começar a Fase 2 (checklist da próxima sessão)
+### Financeiro
+- **`/financeiro/contas`**: abas A Receber · A Pagar · Receita · Despesa. Sub-filtros por tipo/categoria. Checkbox de pago inline. "+ Nova conta" (avulso/pagar).
+- **`/financeiro`**: 6 cards (bruta, impostos, líquida, a receber, a pagar, saldo) + barras de previsão com imposto+taxa estimados.
+- **`/config`**: Perfil, Equipe, Financeiro (alíquota + taxa maquininha), CRM (dias stale), Aparência, Segurança.
 
-1. Ler `01-produto.md` → `02-dados.md` → `03-telas.md` → `04-arquitetura.md` → `06-design-system.md` (e abrir o `style-guide.html`) → `05-roteiro.md`.
-2. Executar a **etapa 2.0** (alinhamento visual da fundação) e validar com o humano.
-3. Seguir os itens 1–6 da Fase 2 no roteiro, cada um no fluxo UI-first, consumindo `lib/validations/` e `lib/rules/` já prontos.
-4. Padrão de dados obrigatório (`04-arquitetura.md`): página = Server Component → `lib/queries/*` → componentes client; mutação = Server Action colocalizada (zod → rules → Supabase server client → `revalidatePath`).
-5. Ao fim da fase: build + testes verdes, commit `feat(fase-2): …`, `.work/STATUS.md` atualizado, **parar no GATE**.
+### Gestão
+- **`/estrategia`**: 5 blocos fixos (SWOT 2×2, AS IS→TO BE, Blueprint, Missão, Propósito). Só edição.
+- **`/nct`**: narrativas expansíveis + compromissos com badge tipo + ponto de confiança. CRUD por dialog.
+- **`/nct/[commitmentId]`**: detalhe com % editável inline, check-ins, tarefas vinculadas.
+- **`/tarefas`**: board 5 colunas com drag, filtros (projeto/compromisso/área/pessoa/prioridade), coluna Concluída com line-through + máx. 5 + "Ver todos".
 
-## 7. Regras permanentes (resumo)
+### Dashboard
+- **`/`**: 5 blocos (Financeiro, Comercial, Operacional, Tarefas de hoje, NCT). Cada bloco tem `try/catch` independente — falha degrada sozinho sem derrubar os outros.
 
-- Escopo é o dos documentos `01–04`; ideia nova vai para o Backlog em `.work/STATUS.md`, não se implementa.
-- Schema só muda via migration nova versionada em `supabase/migrations/` (aplicada via MCP).
-- Ambiguidade real → perguntar ao humano antes de codar.
-- Código/variáveis em inglês, comentários em português, UI em PT-BR.
-- Nunca commitar secrets; `.env.local` permanece gitignored.
-- Idempotência das automações: consultar-antes-de-criar (charge setup por deal, parcela por `contract_id+due_date`).
+---
+
+## 3. Arquitetura e padrões obrigatórios
+
+### Fluxo de dados
+```
+page.tsx (Server Component)
+  → lib/queries/dominio.ts       ← lê do Supabase
+  → ClientComponent.tsx          ← recebe dados via props
+      → lib/actions/dominio.ts   ← mutação (Server Action)
+          → zod validate
+          → lib/rules/*.ts       ← lógica pura (sem I/O)
+          → supabase server client
+          → revalidatePath(...)
+```
+
+### Padrões que não devem ser quebrados
+
+- **`ActionState`** para todos os forms com `useActionState` — tipo em `lib/actions/action-state.ts`.
+- **Labels e cores** de status sempre de `lib/format.ts` (nunca string solta ou cor inline).
+- **Datas** sempre com `lib/date-range.ts` — fuso Brasília, semana segunda→domingo, `parseDateOnly` sem deslocar.
+- **Enums** do banco espelham os schemas Zod em `lib/validations/` — fonte da verdade.
+- **Idempotência de parcelas**: UNIQUE `(contract_id, due_date)` em `charges` (contratos mensais usam `upsert`; avulsos/setup têm `contract_id = null` e não são idempotentes).
+- **Nunca RLS manual** — policy `authenticated_all` já está em todas as tabelas; não criar, não duplicar.
+- **Schema só via migration** em `supabase/migrations/` + regenerar `lib/supabase/types.ts` depois.
+
+### Arquivos-chave por responsabilidade
+
+| Responsabilidade | Arquivo |
+|---|---|
+| Labels PT-BR e cores de status | `lib/format.ts` |
+| Helpers de data e período | `lib/date-range.ts` |
+| Transições válidas do funil | `lib/rules/deal-stage.ts` |
+| Estado derivado do contato | `lib/rules/contact-status.ts` |
+| Geração de parcelas mensais | `lib/rules/recurrence.ts` |
+| Próxima data de tarefa recorrente | `lib/rules/task-recurrence.ts` |
+| Métricas do funil | `lib/rules/funnel-metrics.ts` |
+| Receita líquida | `lib/rules/net-revenue.ts` |
+| Clients Supabase (server/client/middleware) | `lib/supabase/` |
+| Types gerados do banco | `lib/supabase/types.ts` |
+| Sidebar (NAV_GROUPS) | `components/app-sidebar.tsx` |
+| Filtro temporal global | `components/period-filter.tsx` |
+| Badge de qualquer entidade | `components/entity-badge.tsx` |
+| Avatar de iniciais | `components/ui-shared/initials-avatar.tsx` |
+| Overflow da coluna Concluída | `components/tasks/done-column-overflow.tsx` |
+| Kanban compartilhado (impl + manutenção) | `components/tasks/tasks-kanban.tsx` |
+
+---
+
+## 4. Design system
+
+**Fonte da verdade visual:** `frontend-teste/style-guide.html` (abrir no navegador — tem tema claro e escuro).
+
+Manual completo: `docs/06-design-system.md`.
+
+Regra absoluta: **nenhum botão, badge, input, cor ou medida é inventado**. Tudo sai dos tokens e receitas do design system. Se o `.md` e o `.html` divergirem, o `.html` vence.
+
+---
+
+## 5. Automações do banco (todas em server actions — sem triggers, sem cron)
+
+| Gatilho | Efeito |
+|---|---|
+| Mudança de `deal.stage` | Grava `deal_stage_events` |
+| Deal → `oportunidade` | Exige criar projeto (nome obrigatório no modal) |
+| Deal → `perdido` | Exige `lost_reason` |
+| Deal → `desqualificado` | Só de `prospect` ou `lead` |
+| Deal → `fechado` | Wizard completo: cria parcelas de pagamento (`charges` kind `setup`) + contrato de manutenção opcional; sincroniza `total_value` com a soma das parcelas |
+| Contrato `mensal` ativado/reconfigurado | Gera `min_months` parcelas `recorrencia` em `charges`; idempotente por `(contract_id, due_date)` via upsert; preserva parcelas pagas |
+| Mudança de `project.status` | Grava `project_stage_events` |
+| Check-in NCT registrado | Atualiza `progress`/`confidence` no `commitment` |
+| `charges` com método=Cartão marcada como paga | Materializa taxa de maquininha como conta a pagar (`variavel`) linkada por `source_charge_id` |
+| `charges` paga com alíquota > 0 | Materializa imposto como conta a pagar (`imposto`) linkada por `source_charge_id` |
+| Tarefa mensal de manutenção concluída | Gera automaticamente a próxima ocorrência (status `todo`, vencimento no próximo `recurrence_day`) |
+| "Contato dado" em manutenção | Registra interação + avança `next_contact_date` pela `contact_frequency_days` |
+
+---
+
+## 6. Como fazer mudanças
+
+### Mudança de UI (sem schema)
+1. Ler `docs/06-design-system.md` e abrir `frontend-teste/style-guide.html`.
+2. Labels/cores: sempre via `lib/format.ts`.
+3. Padrão: Server Component → query → client component.
+4. `npm run build` + `npm test` verdes antes de commitar.
+
+### Mudança de lógica de negócio
+1. A lógica pura vai em `lib/rules/` (sem I/O).
+2. Cobrir com teste em `__tests__/rules/`.
+3. Action chama a regra; page não chama regra diretamente.
+
+### Mudança de schema (nova coluna, tabela ou enum)
+1. Criar migration em `supabase/migrations/` com o próximo número em sequência (atualmente **0020**).
+2. Aplicar via MCP `supabase` (tool `apply_migration`).
+3. Regenerar types: MCP `supabase` → `generate_typescript_types` → salvar em `lib/supabase/types.ts`.
+4. **Nunca** criar ou duplicar policy RLS — `authenticated_all` já cobre tudo.
+5. Migrations destrutivas (recreate de enum, drop column): seguir o padrão expand-then-contract em múltiplas migrations.
+
+### Adicionar nova rota
+1. Criar pasta em `app/(dashboard)/nova-rota/`.
+2. `page.tsx` = Server Component que chama query → passa para client component.
+3. Adicionar à constante `NAV_GROUPS` em `components/app-sidebar.tsx` se for item de menu.
+
+---
+
+## 7. Segurança e ambiente
+
+- `.env.local` é gitignored — nunca commitar.
+- `NEXT_PUBLIC_SUPABASE_URL` e `NEXT_PUBLIC_SUPABASE_ANON_KEY` são as únicas vars de ambiente necessárias.
+- Service role key **nunca** no client, **nunca** commitada.
+- Middleware (`/middleware.ts`) protege todo o grupo `(dashboard)`; `/login` é a única rota pública.
+- Sem signup público — usuários criados no painel Supabase Auth.
+- Pendência de configuração (fora do código): habilitar *Leaked Password Protection* no painel Supabase Auth.
+
+---
+
+## 8. Backlog / pendências conhecidas
+
+- Aviso de build `middleware→proxy` (deprecação Next 16) — fora de escopo, não crítico.
+- `dev.log` no `.gitignore` (ignorado localmente).
+
+Detalhes de cada entrega: `.work/STATUS.md`.
