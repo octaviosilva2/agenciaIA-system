@@ -33,6 +33,8 @@ export type ContactRow = {
   contactEmail: string | null
   origin: string | null
   notes: string | null
+  // Lista de contatos (company_contacts) para o dialog de edição.
+  contacts: { name: string; phone: string }[]
 }
 
 // Forma do retorno bruto do Supabase (client não tipado → cast local, sem `any`).
@@ -40,6 +42,7 @@ type RawDeal = { id: string; stage: DealStage; created_at: string }
 type RawProject = { id: string; name: string; status: string; deal_id: string | null }
 type RawContract = { status: string }
 type RawActivity = { occurred_at: string | null }
+type RawCompanyContact = { name: string; phone: string | null; position: number }
 type RawCompany = {
   id: string
   name: string
@@ -54,6 +57,7 @@ type RawCompany = {
   projects: RawProject[]
   contracts: RawContract[]
   activities: RawActivity[]
+  company_contacts: RawCompanyContact[]
 }
 
 /**
@@ -70,7 +74,8 @@ export async function getContacts(archived = false): Promise<ContactRow[]> {
       deals ( id, stage, created_at ),
       projects ( id, name, status, deal_id ),
       contracts ( status ),
-      activities ( occurred_at )
+      activities ( occurred_at ),
+      company_contacts ( name, phone, position )
     `,
     )
 
@@ -121,6 +126,14 @@ export async function getContacts(archived = false): Promise<ContactRow[]> {
       return !latest || a.occurred_at > latest ? a.occurred_at : latest
     }, null)
 
+    // Contatos ordenados por position; fallback para o par antigo da company.
+    const contacts = [...(c.company_contacts ?? [])]
+      .sort((a, b) => a.position - b.position)
+      .map((ct) => ({ name: ct.name, phone: ct.phone ?? '' }))
+    if (contacts.length === 0 && c.contact_name) {
+      contacts.push({ name: c.contact_name, phone: c.contact_phone ?? '' })
+    }
+
     return {
       id: c.id,
       name: c.name,
@@ -137,6 +150,7 @@ export async function getContacts(archived = false): Promise<ContactRow[]> {
       contactEmail: c.contact_email,
       origin: c.origin,
       notes: c.notes,
+      contacts,
     }
   })
 }

@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { createContact } from '@/app/(dashboard)/contatos/actions'
+import { ContactsFieldset } from '@/components/contacts/contacts-fieldset'
 import { INITIAL_ACTION_STATE } from '@/lib/actions/action-state'
 
 // Receitas de campo do design system (§5.2)
@@ -93,14 +94,7 @@ export function NewContactDialog() {
             <input id="city" name="city" placeholder="Ex.: Balneário Camboriú" className={inputCls} />
           </div>
 
-          <div>
-            <label className={labelCls} htmlFor="contact_name">Nome do contato</label>
-            <input id="contact_name" name="contact_name" placeholder="Pessoa de contato" className={inputCls} />
-          </div>
-          <div>
-            <label className={labelCls} htmlFor="contact_phone">Telefone</label>
-            <input id="contact_phone" name="contact_phone" placeholder="(47) 90000-0000" className={inputCls} />
-          </div>
+          <ContactsFieldset />
 
           <div className="sm:col-span-2">
             <label className={labelCls} htmlFor="contact_email">E-mail</label>

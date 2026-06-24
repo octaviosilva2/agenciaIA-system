@@ -40,6 +40,11 @@ export type ProfileContract = {
   monthlyValue: number | null
 }
 
+export type ProfileContactPerson = {
+  name: string
+  phone: string | null
+}
+
 export type ContactProfile = {
   id: string
   name: string
@@ -52,6 +57,7 @@ export type ContactProfile = {
   notes: string | null
   archived: boolean
   status: ContactStatus
+  contacts: ProfileContactPerson[]
   deals: ProfileDeal[]
   activities: ProfileActivity[]
   diagnostics: ProfileDiagnostic[]
@@ -95,6 +101,7 @@ type Raw = {
     created_at: string | null
   }[]
   contracts: { id: string; name: string; kind: string; status: string; monthly_value: number | null }[]
+  company_contacts: { name: string; phone: string | null; position: number }[]
 }
 
 /** Carrega o perfil completo de um contato (header + 6 seções de 03-telas). */
@@ -109,7 +116,8 @@ export async function getContactProfile(id: string): Promise<ContactProfile | nu
                projects ( id, name, status ) ),
       activities ( id, type, content, occurred_at ),
       diagnostics ( id, context, problems, opportunities, proposed_solution, notes, created_at ),
-      contracts ( id, name, kind, status, monthly_value )
+      contracts ( id, name, kind, status, monthly_value ),
+      company_contacts ( name, phone, position )
     `,
     )
     .eq('id', id)
@@ -139,6 +147,16 @@ export async function getContactProfile(id: string): Promise<ContactProfile | nu
     notes: c.notes,
     archived: c.archived_at != null,
     status,
+    // Contatos ordenados por position; fallback para o par antigo da company.
+    contacts: (() => {
+      const list = [...(c.company_contacts ?? [])]
+        .sort((a, b) => a.position - b.position)
+        .map((ct) => ({ name: ct.name, phone: ct.phone }))
+      if (list.length === 0 && c.contact_name) {
+        list.push({ name: c.contact_name, phone: c.contact_phone })
+      }
+      return list
+    })(),
     deals: deals.map((d) => {
       const p = d.projects[0] ?? null
       return {

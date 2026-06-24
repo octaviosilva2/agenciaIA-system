@@ -1,8 +1,9 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, ChevronRight } from 'lucide-react'
+import { ArrowLeft, ChevronRight, Clock } from 'lucide-react'
 import { getOpportunityDetail } from '@/lib/queries/opportunity-detail'
 import { EntityBadge } from '@/components/ui/entity-badge'
+import { Button } from '@/components/ui/button'
 import { OpportunityActions } from '@/components/opportunities/opportunity-actions'
 import { ScopeEditor } from '@/components/opportunities/scope-editor'
 import { ProposalEditor } from '@/components/opportunities/proposal-editor'
@@ -10,7 +11,15 @@ import { PaymentEditor } from '@/components/projects/payment-editor'
 import { DeliveryControls } from '@/components/projects/delivery-controls'
 import { MaintenanceEditor } from '@/components/projects/maintenance-editor'
 import { ProjectHeaderActions } from '@/components/projects/project-header-actions'
-import { DEAL_STAGE, PROJECT_STATUS, TONE, formatCurrency } from '@/lib/format'
+import {
+  DEAL_STAGE,
+  PROJECT_STATUS,
+  TONE,
+  deliveryCountdown,
+  formatCurrency,
+  formatDate,
+  isOverdue,
+} from '@/lib/format'
 
 function SectionCard({
   title,
@@ -41,7 +50,7 @@ export default async function ProjetoDetailPage({
   const detail = await getOpportunityDetail(id)
   if (!detail) notFound()
 
-  const headerValue = detail.totalValue ?? detail.estimatedValue
+  const headerValue = detail.headerValue
   const doneScope = detail.scopeItems.filter((s) => s.status === 'entregue').length
   const totalScope = detail.scopeItems.length
 
@@ -101,7 +110,16 @@ export default async function ProjetoDetailPage({
           </div>
         </div>
         <div className="mt-3 border-t border-border pt-3">
-          <OpportunityActions dealId={detail.dealId} stage={detail.stage} />
+          <OpportunityActions
+            dealId={detail.dealId}
+            stage={detail.stage}
+            projectId={detail.projectId}
+            companyId={detail.companyId}
+            projectName={detail.project}
+            suggestedTotal={detail.totalValue ?? detail.estimatedValue}
+            suggestedMonthly={detail.proposal.maintenanceMin}
+            suggestedHourly={detail.proposal.hourlyEstimate}
+          />
         </div>
       </header>
 
@@ -115,7 +133,8 @@ export default async function ProjetoDetailPage({
                 dealId={detail.dealId}
                 totalValue={detail.totalValue}
                 driveUrl={detail.driveUrl}
-                notes={detail.notes}
+                proposal={detail.proposal}
+                legacyNotes={detail.notes}
               />
             ) : (
               <p className="text-sm text-muted-foreground">Sem projeto vinculado.</p>
@@ -147,10 +166,46 @@ export default async function ProjetoDetailPage({
             <SectionCard
               title="Implementação"
               action={
-                detail.projectStatus && <EntityBadge meta={PROJECT_STATUS[detail.projectStatus]} />
+                <div className="flex items-center gap-2">
+                  {detail.dueDate && (
+                    <span className="text-xs text-muted-foreground">
+                      Entrega {formatDate(detail.dueDate)}
+                    </span>
+                  )}
+                  {detail.projectStatus && <EntityBadge meta={PROJECT_STATUS[detail.projectStatus]} />}
+                </div>
               }
             >
               <div className="space-y-3">
+                {/* Card destacado de tempo restante (atrasado em vermelho). */}
+                {detail.dueDate && detail.projectStatus !== 'entregue' && (
+                  <div
+                    className={`flex items-center gap-2.5 rounded-lg border p-3 ${
+                      isOverdue(detail.dueDate)
+                        ? 'border-red-200 bg-red-50 dark:border-red-500/30 dark:bg-red-500/10'
+                        : 'border-border bg-muted/40'
+                    }`}
+                  >
+                    <Clock
+                      className={`h-5 w-5 shrink-0 ${
+                        isOverdue(detail.dueDate)
+                          ? 'text-red-600 dark:text-red-400'
+                          : 'text-muted-foreground'
+                      }`}
+                    />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Tempo restante</p>
+                      <p
+                        className={`text-sm font-semibold ${
+                          isOverdue(detail.dueDate) ? 'text-red-600 dark:text-red-400' : ''
+                        }`}
+                      >
+                        {deliveryCountdown(detail.dueDate)}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 {/* Progresso do escopo */}
                 {totalScope > 0 && (
                   <div>
@@ -179,13 +234,13 @@ export default async function ProjetoDetailPage({
                   />
                 )}
                 {detail.projectId && (
-                  <Link
-                    href={`/implementacao/${detail.projectId}`}
-                    className="inline-flex items-center gap-1.5 text-sm font-medium text-foreground hover:underline"
+                  <Button
+                    className="w-full"
+                    render={<Link href={`/implementacao/${detail.projectId}`} />}
                   >
                     Abrir tela de implementação
                     <ChevronRight className="h-4 w-4" />
-                  </Link>
+                  </Button>
                 )}
               </div>
             </SectionCard>

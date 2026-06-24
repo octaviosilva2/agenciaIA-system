@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { parseISO } from 'date-fns'
+import { addDays, format, parseISO } from 'date-fns'
 import { createClient } from '@/lib/supabase/server'
 import { generateRecurrences } from '@/lib/rules/recurrence'
 import type { ActionState } from '@/lib/actions/action-state'
@@ -58,19 +58,42 @@ export async function renameProject(
   return { success: true, message: 'Projeto renomeado.' }
 }
 
-/** Atualiza dados da proposta (valor do projeto, link de arquivo, notas). */
+/** Estimativas da proposta (espelha projects.proposal jsonb). */
+export type ProposalInput = {
+  setupEstimate: number | null
+  maintenanceMin: number | null
+  maintenanceMax: number | null
+  hourlyEstimate: number | null
+  deliveryEstimate: string | null
+  notes: string | null
+}
+
+/**
+ * Atualiza a proposta: valor headline (total_value), link de arquivo e as
+ * estimativas de organização (projects.proposal jsonb). As notas espelham também
+ * projects.notes (compat de leitura). Não cria pagamento — isso é pós-fechamento.
+ */
 export async function updateProposal(
   projectId: string,
   dealId: string,
-  data: { totalValue: number | null; driveUrl: string | null; notes: string | null },
+  data: { totalValue: number | null; driveUrl: string | null; proposal: ProposalInput },
 ): Promise<ActionState> {
   const supabase = await createClient()
+  const proposalJson = {
+    setup_estimate: data.proposal.setupEstimate,
+    maintenance_min: data.proposal.maintenanceMin,
+    maintenance_max: data.proposal.maintenanceMax,
+    hourly_estimate: data.proposal.hourlyEstimate,
+    delivery_estimate: data.proposal.deliveryEstimate,
+    notes: data.proposal.notes,
+  }
   const { error } = await supabase
     .from('projects')
     .update({
       total_value: data.totalValue,
       drive_url: data.driveUrl,
-      notes: data.notes,
+      proposal: proposalJson,
+      notes: data.proposal.notes, // espelho p/ telas que ainda leem projects.notes
     })
     .eq('id', projectId)
   if (error) return { success: false, message: `Erro ao salvar proposta: ${error.message}` }
@@ -806,4 +829,76 @@ export async function updateMaintenanceContract(
   const dealId = Array.isArray(proj) ? proj[0]?.deal_id : proj?.deal_id
   if (dealId) revalidatePath(`/projetos/${dealId}`)
   return { success: true, message: 'Cobrança atualizada.' }
+}
+
+/**
+ * Registra um relato/interação de relacionamento no contrato de manutenção
+ * (maintenance_interactions). Autor = usuário logado (vem do servidor).
+ */
+export async function createMaintenanceInteraction(
+  contractId: string,
+  content: string,
+): Promise<ActionState> {
+  const text = content.trim()
+  if (!text) return { success: false, message: 'Escreva o relato.' }
+
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  const { error } = await supabase
+    .from('maintenance_interactions')
+    .insert({ contract_id: contractId, content: text, created_by: user?.id ?? null })
+  if (error) return { success: false, message: `Erro ao salvar relato: ${error.message}` }
+
+  revalidatePath(`/manutencao/${contractId}`)
+  return { success: true, message: 'Relato registrado.' }
+}
+
+/**
+ * "Contato dado": registra a interação E avança o próximo contato pela frequência.
+ * Mantém a cadência — a base é o maior entre hoje e o próximo contato agendado
+ * (robusto para contatos atrasados), somando contact_frequency_days (default 30).
+ */
+export async function registerMaintenanceContact(
+  contractId: string,
+  note?: string,
+): Promise<ActionState> {
+  const supabase = await createClient()
+  const { data: ctr, error: cErr } = await supabase
+    .from('contracts')
+    .select('next_contact_date, contact_frequency_days')
+    .eq('id', contractId)
+    .single()
+  if (cErr || !ctr) return { success: false, message: `Contrato não encontrado: ${cErr?.message ?? ''}` }
+
+  const c = ctr as { next_contact_date: string | null; contact_frequency_days: number | null }
+  const freq = c.contact_frequency_days && c.contact_frequency_days > 0 ? c.contact_frequency_days : 30
+  const today = format(new Date(), 'yyyy-MM-dd')
+  const base = c.next_contact_date && c.next_contact_date > today ? c.next_contact_date : today
+  const nextDate = format(addDays(parseISO(base), freq), 'yyyy-MM-dd')
+
+  // 1. Registra a interação (contato realizado).
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  const { error: iErr } = await supabase
+    .from('maintenance_interactions')
+    .insert({
+      contract_id: contractId,
+      content: note?.trim() || 'Contato realizado.',
+      created_by: user?.id ?? null,
+    })
+  if (iErr) return { success: false, message: `Erro ao registrar contato: ${iErr.message}` }
+
+  // 2. Avança o próximo contato.
+  const { error: uErr } = await supabase
+    .from('contracts')
+    .update({ next_contact_date: nextDate })
+    .eq('id', contractId)
+  if (uErr) return { success: false, message: `Erro ao agendar próximo contato: ${uErr.message}` }
+
+  revalidatePath(`/manutencao/${contractId}`)
+  revalidatePath('/manutencao')
+  return { success: true, message: `Contato registrado · próximo em ${freq} dias.` }
 }

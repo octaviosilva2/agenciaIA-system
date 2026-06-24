@@ -188,7 +188,12 @@ export async function getMaintenanceBoard(
     query = query.is('archived_at', null).eq('status', view === 'ativos' ? 'ativo' : 'encerrado')
   }
 
-  const { data, error } = await query.order('start_date', { ascending: false })
+  // Fila de contatos: ordena por próximo contato (mais cedo/atrasado primeiro);
+  // contratos sem data definida vão para o fim.
+  const { data, error } = await query.order('next_contact_date', {
+    ascending: true,
+    nullsFirst: false,
+  })
 
   if (error) throw new Error(`Falha ao carregar manutenção: ${error.message}`)
 

@@ -25,6 +25,36 @@ export type ChargeRow = {
 export type ScopeStatus = 'pendente' | 'em_andamento' | 'entregue'
 export type ScopeItem = { id: string; title: string; description: string; status: ScopeStatus }
 
+/**
+ * Proposta como área de organização (projects.proposal jsonb). São estimativas
+ * pré-fechamento — não confundir com o pagamento real (charges pós-fechamento).
+ */
+export type ProposalData = {
+  setupEstimate: number | null
+  maintenanceMin: number | null
+  maintenanceMax: number | null
+  hourlyEstimate: number | null
+  deliveryEstimate: string | null
+  notes: string | null
+}
+
+/** Normaliza o jsonb projects.proposal (tolerante a campos ausentes/legados). */
+function normalizeProposal(raw: unknown): ProposalData {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  const num = (v: unknown): number | null =>
+    typeof v === 'number' && Number.isFinite(v) ? v : null
+  const str = (v: unknown): string | null =>
+    typeof v === 'string' && v.trim() !== '' ? v : null
+  return {
+    setupEstimate: num(r.setup_estimate),
+    maintenanceMin: num(r.maintenance_min),
+    maintenanceMax: num(r.maintenance_max),
+    hourlyEstimate: num(r.hourly_estimate),
+    deliveryEstimate: str(r.delivery_estimate),
+    notes: str(r.notes),
+  }
+}
+
 /** Normaliza item de escopo do banco (suporta formato antigo contracted/delivered). */
 function normalizeScopeItem(raw: unknown): ScopeItem {
   if (!raw || typeof raw !== 'object') {
@@ -82,11 +112,13 @@ export type OpportunityDetail = {
   isClosed: boolean // deal fechado → libera Implementação/Manutenção
   estimatedValue: number | null
   totalValue: number | null // valor da proposta (projects.total_value)
+  headerValue: number | null // valor do topo: soma das cobranças de pagamento quando fechado
   hasMaintenance: boolean | null
   companyId: string
   company: string
   driveUrl: string | null
   notes: string | null
+  proposal: ProposalData // estimativas da proposta (jsonb)
   scopeItems: ScopeItem[]
   // Prazos e implementação (do projeto)
   startDate: string | null
@@ -132,6 +164,7 @@ type RawProject = {
   total_value: number | null
   drive_url: string | null
   notes: string | null
+  proposal: unknown
   scope_items: ScopeItem[] | null
   status: ProjectStatus
   start_date: string | null
@@ -168,7 +201,7 @@ export async function getOpportunityDetail(dealId: string): Promise<OpportunityD
       id, title, stage, estimated_value, has_maintenance, archived_at,
       company:companies ( id, name ),
       projects (
-        id, name, total_value, drive_url, notes, scope_items,
+        id, name, total_value, drive_url, notes, proposal, scope_items,
         status, start_date, due_date, custom_stages,
         contracts ( id, kind, status, monthly_value, hourly_rate, min_months, start_date, next_contact_date, billing_day, sla ),
         charges ( id, description, kind, amount, due_date, status, method, hours, contract_id )
@@ -206,6 +239,11 @@ export async function getOpportunityDetail(dealId: string): Promise<OpportunityD
   const maintenanceCharges = allCharges.filter(
     (c) => c.kind === 'recorrencia' || (c.kind === 'avulso' && c.contractId != null),
   )
+  // Valor do topo: soma das cobranças de pagamento (fora canceladas) — fonte de verdade
+  // após o fechamento (o wizard popula o pagamento). Antes disso, cai na proposta/estimado.
+  const paymentTotal = paymentCharges
+    .filter((c) => c.status !== 'cancelado')
+    .reduce((s, c) => s + c.amount, 0)
 
   // Contrato de manutenção: prioriza o ativo; senão, o primeiro existente.
   const rawContract =
@@ -234,11 +272,16 @@ export async function getOpportunityDetail(dealId: string): Promise<OpportunityD
     isClosed: d.stage === 'fechado',
     estimatedValue: d.estimated_value,
     totalValue: project?.total_value ?? null,
+    headerValue:
+      d.stage === 'fechado' && paymentTotal > 0
+        ? paymentTotal
+        : (project?.total_value ?? d.estimated_value ?? (paymentTotal > 0 ? paymentTotal : null)),
     hasMaintenance: d.has_maintenance,
     companyId: company?.id ?? '',
     company: company?.name ?? '—',
     driveUrl: project?.drive_url ?? null,
     notes: project?.notes ?? null,
+    proposal: normalizeProposal(project?.proposal),
     scopeItems: (project?.scope_items as unknown[] ?? []).map(normalizeScopeItem),
     startDate: project?.start_date ?? null,
     dueDate: project?.due_date ?? null,

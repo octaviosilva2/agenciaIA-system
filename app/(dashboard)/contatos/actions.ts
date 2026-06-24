@@ -14,6 +14,24 @@ function field(fd: FormData, key: string): string | null {
 }
 
 /**
+ * Extrai a lista de contatos (nome + telefone) do FormData, faz o zip por índice
+ * dos campos repetidos contact_name/contact_phone e descarta os sem nome. Limite 3.
+ */
+function contactsFromForm(fd: FormData): { name: string; phone: string | null }[] {
+  const names = fd.getAll('contact_name')
+  const phones = fd.getAll('contact_phone')
+  const list: { name: string; phone: string | null }[] = []
+  for (let i = 0; i < names.length; i++) {
+    const name = typeof names[i] === 'string' ? (names[i] as string).trim() : ''
+    if (!name) continue
+    const phoneRaw = phones[i]
+    const phone = typeof phoneRaw === 'string' && phoneRaw.trim() ? phoneRaw.trim() : null
+    list.push({ name, phone })
+  }
+  return list.slice(0, 3)
+}
+
+/**
  * Cria um novo contato (companies). Origem em texto livre.
  * Fluxo padrão: zod → Supabase server client → revalidatePath.
  */
@@ -21,13 +39,15 @@ export async function createContact(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  // Lista dinâmica de contatos; o primeiro espelha companies.contact_name/phone.
+  const contacts = contactsFromForm(formData)
   const raw = {
     // name vai como string (mesmo vazia) para acionar a mensagem do zod
     name: typeof formData.get('name') === 'string' ? (formData.get('name') as string).trim() : '',
     segment: field(formData, 'segment'),
     city: field(formData, 'city'),
-    contact_name: field(formData, 'contact_name'),
-    contact_phone: field(formData, 'contact_phone'),
+    contact_name: contacts[0]?.name ?? null,
+    contact_phone: contacts[0]?.phone ?? null,
     contact_email: field(formData, 'contact_email'),
     origin: field(formData, 'origin'),
     notes: field(formData, 'notes'),
@@ -59,6 +79,13 @@ export async function createContact(
 
   // O contato entra direto no funil em Prospect (não existe estado "Contato" solto).
   const companyId = (company as { id: string }).id
+
+  // Grava a lista completa de contatos na tabela dedicada (limite 3 garantido no helper).
+  if (contacts.length > 0) {
+    await supabase.from('company_contacts').insert(
+      contacts.map((c, i) => ({ company_id: companyId, name: c.name, phone: c.phone, position: i })),
+    )
+  }
   const { data: deal, error: dealErr } = await supabase
     .from('deals')
     .insert({

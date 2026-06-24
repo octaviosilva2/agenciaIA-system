@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Mail, Phone, MapPin, User, FolderKanban } from 'lucide-react'
+import { ArrowLeft, Mail, MapPin, User, FolderKanban } from 'lucide-react'
 import { getContactProfile } from '@/lib/queries/contact-profile'
 import { EntityBadge } from '@/components/ui/entity-badge'
 import { ActivityForm } from '@/components/contacts/activity-form'
@@ -96,6 +96,7 @@ export default async function ContatoProfilePage({
               origin: profile.origin,
               notes: profile.notes,
               archived: profile.archived,
+              contacts: profile.contacts.map((c) => ({ name: c.name, phone: c.phone ?? '' })),
             }}
           />
         </div>
@@ -111,12 +112,12 @@ export default async function ContatoProfilePage({
                   {[profile.segment, profile.city].filter(Boolean).join(' · ')}
                 </InfoRow>
               )}
-              {profile.contactName && (
-                <InfoRow icon={<User className="h-3.5 w-3.5" />}>{profile.contactName}</InfoRow>
-              )}
-              {profile.contactPhone && (
-                <InfoRow icon={<Phone className="h-3.5 w-3.5" />}>{profile.contactPhone}</InfoRow>
-              )}
+              {/* Todos os contatos da empresa (company_contacts). */}
+              {profile.contacts.map((c, i) => (
+                <InfoRow key={i} icon={<User className="h-3.5 w-3.5" />}>
+                  {c.phone ? `${c.name} · ${c.phone}` : c.name}
+                </InfoRow>
+              ))}
               {profile.contactEmail && (
                 <InfoRow icon={<Mail className="h-3.5 w-3.5" />}>{profile.contactEmail}</InfoRow>
               )}

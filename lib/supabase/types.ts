@@ -367,6 +367,41 @@ export type Database = {
             foreignKeyName: "companies_owner_id_fkey"
             columns: ["owner_id"]
             isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      company_contacts: {
+        Row: {
+          company_id: string
+          created_at: string
+          id: string
+          name: string
+          phone: string | null
+          position: number
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          id?: string
+          name: string
+          phone?: string | null
+          position?: number
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          id?: string
+          name?: string
+          phone?: string | null
+          position?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_contacts_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
             referencedRelation: "companies"
             referencedColumns: ["id"]
           },
@@ -624,6 +659,45 @@ export type Database = {
           },
         ]
       }
+      maintenance_interactions: {
+        Row: {
+          content: string
+          contract_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+        }
+        Insert: {
+          content: string
+          contract_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+        }
+        Update: {
+          content?: string
+          contract_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "maintenance_interactions_contract_id_fkey"
+            columns: ["contract_id"]
+            isOneToOne: false
+            referencedRelation: "contracts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "maintenance_interactions_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       narratives: {
         Row: {
           created_at: string
@@ -764,6 +838,7 @@ export type Database = {
           notes: string | null
           owner_id: string | null
           progress: number
+          proposal: Json
           scope_items: Json
           start_date: string | null
           status: Database["public"]["Enums"]["project_status"]
@@ -782,6 +857,7 @@ export type Database = {
           notes?: string | null
           owner_id?: string | null
           progress?: number
+          proposal?: Json
           scope_items?: Json
           start_date?: string | null
           status?: Database["public"]["Enums"]["project_status"]
@@ -800,6 +876,7 @@ export type Database = {
           notes?: string | null
           owner_id?: string | null
           progress?: number
+          proposal?: Json
           scope_items?: Json
           start_date?: string | null
           status?: Database["public"]["Enums"]["project_status"]
@@ -1028,12 +1105,7 @@ export type Database = {
         | "swot"
         | "asis_tobe"
         | "blueprint"
-      task_area:
-        | "gestao"
-        | "comercial"
-        | "operacional"
-        | "financeiro"
-        | "sistema"
+      task_area: "gestao" | "comercial" | "operacional" | "financeiro" | "sistema"
       task_priority: "urgente" | "proximo" | "futuro"
       task_recurrence: "none" | "monthly"
       task_status: "analisar" | "todo" | "doing" | "impedimento" | "done"
@@ -1164,7 +1236,14 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      activity_type: ["nota", "reuniao", "ligacao", "email", "whatsapp", "outro"],
+      activity_type: [
+        "nota",
+        "reuniao",
+        "ligacao",
+        "email",
+        "whatsapp",
+        "outro",
+      ],
       charge_kind: ["setup", "recorrencia", "avulso"],
       charge_method: ["pix", "boleto", "cartao", "transferencia", "outro"],
       charge_status: ["pendente", "pago", "cancelado"],
@@ -1173,14 +1252,44 @@ export const Constants = {
       confidence_level: ["baixa", "media", "alta"],
       contract_kind: ["mensal", "avulso"],
       contract_status: ["ativo", "encerrado"],
-      deal_stage: ["prospect", "lead", "diagnostico", "oportunidade", "escopo", "proposta", "negociacao", "fechado", "perdido", "reativar_futuramente", "desqualificado"],
+      deal_stage: [
+        "prospect",
+        "lead",
+        "diagnostico",
+        "oportunidade",
+        "escopo",
+        "proposta",
+        "negociacao",
+        "fechado",
+        "perdido",
+        "reativar_futuramente",
+        "desqualificado",
+      ],
       deal_urgency: ["baixa", "media", "alta"],
       level_scale: ["baixo", "medio", "alto"],
       narrative_status: ["ativa", "concluida", "arquivada"],
       payable_category: ["fixo", "variavel", "imposto"],
-      project_status: ["a_iniciar", "briefing", "desenvolvimento", "revisao", "entregue"],
-      strategy_block_kind: ["missao", "proposito", "swot", "asis_tobe", "blueprint"],
-      task_area: ["gestao", "comercial", "operacional", "financeiro", "sistema"],
+      project_status: [
+        "a_iniciar",
+        "briefing",
+        "desenvolvimento",
+        "revisao",
+        "entregue",
+      ],
+      strategy_block_kind: [
+        "missao",
+        "proposito",
+        "swot",
+        "asis_tobe",
+        "blueprint",
+      ],
+      task_area: [
+        "gestao",
+        "comercial",
+        "operacional",
+        "financeiro",
+        "sistema",
+      ],
       task_priority: ["urgente", "proximo", "futuro"],
       task_recurrence: ["none", "monthly"],
       task_status: ["analisar", "todo", "doing", "impedimento", "done"],

@@ -4,7 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { format, parseISO } from 'date-fns'
 import { toast } from 'sonner'
-import { AlertCircle, ChevronRight, ListChecks, Plus } from 'lucide-react'
+import { AlertCircle, ChevronRight, ListChecks } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { EntityBadge } from '@/components/ui/entity-badge'
 import {
@@ -17,7 +17,6 @@ import {
 } from '@/lib/format'
 import { setMaintenanceContract, setAvulsoContract } from '@/lib/actions/project'
 import { generateRecurrences } from '@/lib/rules/recurrence'
-import { AvulsoChargeDialog } from '@/components/projects/avulso-charge-dialog'
 import { ContractStatusMenu } from '@/components/projects/contract-status-menu'
 import { ContractManageActions } from '@/components/projects/contract-manage-actions'
 import type { ChargeRow, MaintenanceContract } from '@/lib/queries/opportunity-detail'
@@ -70,7 +69,6 @@ export function MaintenanceEditor({
   // Form avulso
   const [editingAvulso, setEditingAvulso] = useState(false)
   const [hourlyRate, setHourlyRate] = useState('')
-  const [chargeOpen, setChargeOpen] = useState(false)
   const [open, setOpen] = useState(false)
   const [showAllCharges, setShowAllCharges] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -314,7 +312,8 @@ export function MaintenanceEditor({
     )
   }
 
-  // --- Leitura: contrato avulso ---
+  // --- Leitura: contrato avulso (enxuto: detalhes + reconfigurar + abrir tela) ---
+  // Lançar serviço e listar cobranças vivem na tela de Manutenção (sem duplicar aqui).
   if (isAvulso) {
     return (
       <div className="space-y-3">
@@ -329,42 +328,18 @@ export function MaintenanceEditor({
           <ContractStatusMenu contractId={contract.id} status={contract.status} />
         </div>
 
-        {/* Serviços lançados (charges 'avulso' do contrato) */}
-        {charges.length > 0 ? (
-          <ul className="divide-y divide-border">
-            {charges.map((c) => {
-              const overdue = c.status === 'pendente' && isOverdue(c.dueDate)
-              return (
-                <li key={c.id} className="flex items-center justify-between gap-2 py-2 text-sm">
-                  <div className="min-w-0">
-                    <p className="truncate font-medium">{c.description}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {c.hours != null ? `${c.hours}h · ` : ''}Vence {formatDate(c.dueDate)}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <span className="font-mono text-sm tabular-nums">{formatCurrency(c.amount)}</span>
-                    <EntityBadge meta={overdue ? CHARGE_OVERDUE : CHARGE_STATUS[c.status]} />
-                  </div>
-                </li>
-              )
-            })}
-          </ul>
-        ) : (
-          <p className="text-sm text-muted-foreground">Nenhum serviço lançado ainda.</p>
-        )}
+        <Button
+          className="w-full"
+          size="sm"
+          render={<Link href={`/manutencao/${contract.id}`} />}
+        >
+          <ListChecks className="h-4 w-4" />
+          Abrir tela de manutenção
+        </Button>
 
         <div className="flex flex-wrap gap-2">
-          <Button type="button" size="sm" onClick={() => setChargeOpen(true)}>
-            <Plus className="h-4 w-4" />
-            Lançar serviço
-          </Button>
-          <Button variant="outline" size="sm" render={<Link href={`/manutencao/${contract.id}`} />}>
-            <ListChecks className="h-4 w-4" />
-            Tarefas de manutenção
-          </Button>
           <Button type="button" variant="outline" size="sm" onClick={startEditingAvulso}>
-            Reconfigurar
+            Reconfigurar preço
           </Button>
           <ContractManageActions
             contractId={contract.id}
@@ -375,13 +350,6 @@ export function MaintenanceEditor({
             billingDay={contract.billingDay}
           />
         </div>
-
-        <AvulsoChargeDialog
-          open={chargeOpen}
-          onOpenChange={setChargeOpen}
-          contractId={contract.id}
-          hourlyRate={contract.hourlyRate}
-        />
       </div>
     )
   }
@@ -471,13 +439,13 @@ export function MaintenanceEditor({
         </dl>
       )}
 
+      <Button className="w-full" size="sm" render={<Link href={`/manutencao/${contract.id}`} />}>
+        <ListChecks className="h-4 w-4" />
+        Abrir tela de manutenção
+      </Button>
       <div className="flex flex-wrap gap-2">
-        <Button variant="outline" size="sm" render={<Link href={`/manutencao/${contract.id}`} />}>
-          <ListChecks className="h-4 w-4" />
-          Tarefas de manutenção
-        </Button>
         <Button type="button" variant="outline" size="sm" onClick={startEditing}>
-          Reconfigurar
+          Reconfigurar preço
         </Button>
         <ContractManageActions
           contractId={contract.id}

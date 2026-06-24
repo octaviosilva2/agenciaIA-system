@@ -44,6 +44,7 @@ function toEditable(c: ContactRow): EditableContact {
     contactEmail: c.contactEmail,
     origin: c.origin,
     notes: c.notes,
+    contacts: c.contacts,
   }
 }
 

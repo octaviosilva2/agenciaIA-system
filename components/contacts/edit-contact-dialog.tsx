@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { updateContact } from '@/lib/actions/contacts'
+import { ContactsFieldset, type ContactItem } from '@/components/contacts/contacts-fieldset'
 import { INITIAL_ACTION_STATE } from '@/lib/actions/action-state'
 
 const labelCls = 'mb-1 block text-xs font-medium'
@@ -35,6 +36,8 @@ export type EditableContact = {
   contactEmail: string | null
   origin: string | null
   notes: string | null
+  // Lista completa de contatos (company_contacts). Fallback p/ o par antigo abaixo.
+  contacts?: ContactItem[]
 }
 
 /** Dialog controlado de edição de contato (aberto pelo kebab). */
@@ -99,14 +102,15 @@ export function EditContactDialog({
             <input id="edit_city" name="city" defaultValue={contact.city ?? ''} className={inputCls} />
           </div>
 
-          <div>
-            <label className={labelCls} htmlFor="edit_contact_name">Nome do contato</label>
-            <input id="edit_contact_name" name="contact_name" defaultValue={contact.contactName ?? ''} className={inputCls} />
-          </div>
-          <div>
-            <label className={labelCls} htmlFor="edit_contact_phone">Telefone</label>
-            <input id="edit_contact_phone" name="contact_phone" defaultValue={contact.contactPhone ?? ''} className={inputCls} />
-          </div>
+          <ContactsFieldset
+            initial={
+              contact.contacts && contact.contacts.length > 0
+                ? contact.contacts
+                : contact.contactName
+                  ? [{ name: contact.contactName, phone: contact.contactPhone ?? '' }]
+                  : undefined
+            }
+          />
 
           <div className="sm:col-span-2">
             <label className={labelCls} htmlFor="edit_contact_email">E-mail</label>

@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
-import { ArrowLeft, CheckCircle2, Circle, Pencil, Plus } from 'lucide-react'
+import { ArrowLeft, CalendarClock, CheckCircle2, Circle, Pencil, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { EntityBadge } from '@/components/ui/entity-badge'
 import { TasksKanban, type TaskItem } from '@/components/tasks/tasks-kanban'
@@ -17,7 +17,12 @@ import {
   archiveMaintenanceTask,
   unarchiveMaintenanceTask,
 } from '@/lib/actions/tasks'
-import { updateMaintenanceContract, setAvulsoContract } from '@/lib/actions/project'
+import {
+  updateMaintenanceContract,
+  setAvulsoContract,
+  createMaintenanceInteraction,
+  registerMaintenanceContact,
+} from '@/lib/actions/project'
 import { toggleChargePaid } from '@/lib/actions/finance'
 import { EntityActionsMenu } from '@/components/entity-actions-menu'
 import { ContractStatusMenu } from '@/components/projects/contract-status-menu'
@@ -29,8 +34,10 @@ import {
   CHARGE_STATUS,
   CONTRACT_KIND_LABELS,
   TONE,
+  deliveryCountdown,
   formatCurrency,
   formatDate,
+  formatDateTime,
   isOverdue,
 } from '@/lib/format'
 import type { ChargeRow } from '@/lib/queries/opportunity-detail'
@@ -38,6 +45,14 @@ import type { Database } from '@/lib/supabase/types'
 
 type ContractKind = Database['public']['Enums']['contract_kind']
 type ContractStatus = Database['public']['Enums']['contract_status']
+
+/** Relato/interação de relacionamento com o cliente (maintenance_interactions). */
+export type MaintenanceInteraction = {
+  id: string
+  content: string
+  createdAt: string
+  authorName: string | null
+}
 
 /** Dados da tela de manutenção por contrato. */
 export type MaintenanceDetailData = {
@@ -61,6 +76,7 @@ export type MaintenanceDetailData = {
   archived: boolean
   charges: ChargeRow[]
   tasks: TaskItem[]
+  interactions: MaintenanceInteraction[]
 }
 
 const inputCls =
@@ -117,9 +133,42 @@ export function MaintenanceDetail({ data }: { data: MaintenanceDetailData }) {
   const [chargeOpen, setChargeOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [busyIds, setBusyIds] = useState<string[]>([])
+  // Relacionamento: relato novo + estados de envio.
+  const [interaction, setInteraction] = useState('')
+  const [busyContact, setBusyContact] = useState(false)
+  const [busyInteraction, setBusyInteraction] = useState(false)
   const router = useRouter()
 
   const contactOverdue = isOverdue(nextContactDate)
+
+  /** "Contato dado": registra a interação e avança o próximo contato. */
+  async function giveContact() {
+    setBusyContact(true)
+    const res = await registerMaintenanceContact(data.contractId)
+    setBusyContact(false)
+    if (res.success) {
+      toast.success(res.message)
+      router.refresh()
+    } else {
+      toast.error(res.message)
+    }
+  }
+
+  /** Registra um relato/interação livre. */
+  async function addInteraction() {
+    const text = interaction.trim()
+    if (!text) return
+    setBusyInteraction(true)
+    const res = await createMaintenanceInteraction(data.contractId, text)
+    setBusyInteraction(false)
+    if (res.success) {
+      toast.success(res.message)
+      setInteraction('')
+      router.refresh()
+    } else {
+      toast.error(res.message)
+    }
+  }
 
   async function handleToggle(chargeId: string, paid: boolean) {
     setBusyIds((prev) => [...prev, chargeId])
@@ -544,6 +593,82 @@ export function MaintenanceDetail({ data }: { data: MaintenanceDetailData }) {
             />
           </div>
         )}
+      </SectionCard>
+
+      {/* Relacionamento com o cliente: próximo contato + relatos/interações */}
+      <SectionCard title="Relacionamento com o cliente">
+        <div className="space-y-4">
+          {/* Próximo contato + botão "Contato dado" */}
+          <div
+            className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3 ${
+              contactOverdue
+                ? 'border-red-200 bg-red-50 dark:border-red-500/30 dark:bg-red-500/10'
+                : 'border-border bg-muted/40'
+            }`}
+          >
+            <div className="flex items-center gap-2.5">
+              <CalendarClock
+                className={`h-5 w-5 shrink-0 ${
+                  contactOverdue ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'
+                }`}
+              />
+              <div>
+                <p className="text-xs text-muted-foreground">Próximo contato</p>
+                <p
+                  className={`text-sm font-semibold ${
+                    contactOverdue ? 'text-red-600 dark:text-red-400' : ''
+                  }`}
+                >
+                  {data.nextContactDate
+                    ? `${formatDate(data.nextContactDate)} · ${deliveryCountdown(data.nextContactDate)}`
+                    : 'Sem data definida'}
+                </p>
+              </div>
+            </div>
+            <Button type="button" size="sm" disabled={busyContact} onClick={giveContact}>
+              {busyContact ? 'Registrando…' : 'Contato dado'}
+            </Button>
+          </div>
+
+          {/* Form de relato */}
+          <div className="space-y-2">
+            <textarea
+              value={interaction}
+              onChange={(e) => setInteraction(e.target.value)}
+              rows={2}
+              placeholder="Registrar um relato / interação com o cliente…"
+              className={textareaCls}
+            />
+            <Button
+              type="button"
+              size="sm"
+              disabled={busyInteraction || !interaction.trim()}
+              onClick={addInteraction}
+            >
+              {busyInteraction ? 'Salvando…' : 'Registrar relato'}
+            </Button>
+          </div>
+
+          {/* Lista de relatos (mais recentes primeiro) */}
+          {data.interactions.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nenhum relato registrado ainda.</p>
+          ) : (
+            <ul className="space-y-2.5">
+              {data.interactions.map((it) => (
+                <li
+                  key={it.id}
+                  className="rounded-md border border-border p-3 text-sm break-words [overflow-wrap:anywhere]"
+                >
+                  <div className="mb-1.5 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                    <span>{it.authorName ?? '—'}</span>
+                    <span className="shrink-0">{formatDateTime(it.createdAt)}</span>
+                  </div>
+                  <p className="whitespace-pre-wrap">{it.content}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </SectionCard>
 
       {/* Tarefas da manutenção (mesmo kanban da Implementação, com recorrência mensal) */}

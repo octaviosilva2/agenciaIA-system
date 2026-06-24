@@ -53,6 +53,13 @@ type RawTask = {
   archived_at: string | null
 }
 
+type RawInteraction = {
+  id: string
+  content: string
+  created_at: string
+  author: { name: string } | { name: string }[] | null
+}
+
 /** Tela de manutenção por contrato: dados do contrato + tarefas vinculadas. */
 export async function getMaintenanceDetail(contractId: string): Promise<MaintenanceDetailData | null> {
   const supabase = await createClient()
@@ -104,6 +111,22 @@ export async function getMaintenanceDetail(contractId: string): Promise<Maintena
 
   if (tErr) throw new Error(`Falha ao carregar tarefas: ${tErr.message}`)
 
+  // Relatos/interações de relacionamento com o cliente (mais recentes primeiro).
+  const { data: interData, error: iErr } = await supabase
+    .from('maintenance_interactions')
+    .select('id, content, created_at, author:profiles ( name )')
+    .eq('contract_id', contractId)
+    .order('created_at', { ascending: false })
+
+  if (iErr) throw new Error(`Falha ao carregar relatos: ${iErr.message}`)
+
+  const interactions = ((interData ?? []) as RawInteraction[]).map((it) => ({
+    id: it.id,
+    content: it.content,
+    createdAt: it.created_at,
+    authorName: one(it.author)?.name ?? null,
+  }))
+
   const company = one(ct.company)
   const project = one(ct.project)
   const tasks: TaskItem[] = ((tasksData ?? []) as RawTask[]).map((t) => ({
@@ -139,5 +162,6 @@ export async function getMaintenanceDetail(contractId: string): Promise<Maintena
     archived: ct.archived_at != null,
     charges,
     tasks,
+    interactions,
   }
 }

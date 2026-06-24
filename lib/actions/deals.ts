@@ -1,8 +1,15 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { addMonths, format, parseISO } from 'date-fns'
 import { createClient } from '@/lib/supabase/server'
 import { validateStageTransition, canDisqualify, type DealStage } from '@/lib/rules/deal-stage'
+import {
+  setProjectPayment,
+  setMaintenanceContract,
+  setAvulsoContract,
+  type PaymentInstallment,
+} from '@/lib/actions/project'
 import type { ActionState } from '@/lib/actions/action-state'
 
 type ServerClient = Awaited<ReturnType<typeof createClient>>
@@ -159,6 +166,103 @@ export async function closeDeal(dealId: string, hasMaintenance: boolean): Promis
     success: true,
     message: `Negócio fechado ${hasMaintenance ? 'com' : 'sem'} manutenção.`,
   }
+}
+
+/** Pagamento da implementação coletado no wizard de fechamento. */
+export type ClosePaymentInput = {
+  total: number
+  mode: 'avista' | 'parcelado'
+  count: number // nº de parcelas (>= 2 quando parcelado)
+  firstDate: string // 'yyyy-MM-dd'
+  method: string | null
+}
+
+/** Manutenção coletada no wizard (nenhuma / mensal / hora avulsa). */
+export type CloseMaintenanceInput =
+  | { kind: 'none' }
+  | { kind: 'mensal'; monthlyValue: number; minMonths: number; billingDay: number; startDate: string }
+  | { kind: 'avulso'; hourlyRate: number; startDate: string }
+
+/** Gera as parcelas (igual ao payment-editor): divide o total em N, sobra na última. */
+function buildInstallments(p: ClosePaymentInput): PaymentInstallment[] {
+  if (p.mode === 'avista') {
+    return [{ amount: p.total, dueDate: p.firstDate, method: p.method }]
+  }
+  const count = Math.max(2, p.count)
+  const cents = Math.round(p.total * 100)
+  const base = Math.floor(cents / count)
+  const remainder = cents - base * count
+  return Array.from({ length: count }, (_, i) => {
+    const amountCents = base + (i === count - 1 ? remainder : 0)
+    const date = format(addMonths(parseISO(p.firstDate), i), 'yyyy-MM-dd')
+    return { amount: amountCents / 100, dueDate: date, method: p.method }
+  })
+}
+
+/**
+ * Fecha o negócio a partir do WIZARD completo: marca `fechado`, popula o pagamento
+ * (reusa setProjectPayment — NÃO cria a charge setup automática genérica), sincroniza
+ * `total_value` com a soma das parcelas (valor do topo) e, se houver, cria o contrato
+ * de manutenção (reusa setMaintenanceContract | setAvulsoContract). O escopo já é o
+ * mesmo `projects.scope_items` — nada a sincronizar ali.
+ */
+export async function closeDealWithSetup(
+  dealId: string,
+  payment: ClosePaymentInput,
+  maintenance: CloseMaintenanceInput,
+): Promise<ActionState> {
+  const supabase = await createClient()
+  const deal = await fetchDeal(supabase, dealId)
+  if (!deal) return { success: false, message: 'Negócio não encontrado.' }
+
+  const project = deal.projects[0] ?? null
+  if (!project) return { success: false, message: 'Crie o projeto antes de fechar.' }
+
+  const check = validateStageTransition(deal.stage, 'fechado', true)
+  if (!check.valid) return { success: false, message: check.error ?? 'Transição inválida.' }
+
+  if (!(payment.total > 0)) return { success: false, message: 'Informe o valor da implementação.' }
+  if (!payment.firstDate) return { success: false, message: 'Informe o vencimento do pagamento.' }
+
+  const hasMaintenance = maintenance.kind !== 'none'
+
+  // 1. Marca o negócio como fechado.
+  const { error } = await supabase
+    .from('deals')
+    .update({ stage: 'fechado', has_maintenance: hasMaintenance, closed_at: new Date().toISOString() })
+    .eq('id', dealId)
+  if (error) return { success: false, message: `Erro ao fechar: ${error.message}` }
+  await recordEvent(supabase, dealId, 'fechado')
+
+  // 2. Popula o pagamento (reusa a action existente; ela revalida o Financeiro).
+  const installments = buildInstallments(payment)
+  const payRes = await setProjectPayment(project.id, dealId, deal.company_id, installments)
+  if (!payRes.success) return payRes
+
+  // 3. Sincroniza o valor do topo com a soma das parcelas.
+  const total = installments.reduce((s, it) => s + it.amount, 0)
+  await supabase.from('projects').update({ total_value: total }).eq('id', project.id)
+
+  // 4. Manutenção opcional (reusa as actions existentes).
+  if (maintenance.kind === 'mensal') {
+    const mRes = await setMaintenanceContract(project.id, dealId, deal.company_id, project.name, null, {
+      monthlyValue: maintenance.monthlyValue,
+      minMonths: maintenance.minMonths,
+      billingDay: maintenance.billingDay,
+      startDate: maintenance.startDate,
+    })
+    if (!mRes.success) return mRes
+  } else if (maintenance.kind === 'avulso') {
+    const mRes = await setAvulsoContract(project.id, dealId, deal.company_id, project.name, null, {
+      hourlyRate: maintenance.hourlyRate,
+      startDate: maintenance.startDate,
+    })
+    if (!mRes.success) return mRes
+  }
+
+  revalidateBoards()
+  revalidatePath(`/projetos/${dealId}`)
+  return { success: true, message: `Negócio fechado${hasMaintenance ? ' com manutenção' : ''}.` }
 }
 
 /** Marca como perdido (exige motivo). */

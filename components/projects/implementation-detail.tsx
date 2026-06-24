@@ -11,6 +11,7 @@ import {
   ChevronRight,
   Circle,
   CircleDot,
+  Clock,
   Plus,
   Trash2,
 } from 'lucide-react'
@@ -23,6 +24,12 @@ import {
 } from '@/components/ui/dialog'
 import { TasksKanban, type TaskItem } from '@/components/tasks/tasks-kanban'
 import { updateScopeItems, updateProjectStatus, updateProjectProgress } from '@/lib/actions/project'
+import {
+  createImplementationTask,
+  updateImplementationTask,
+  moveImplementationTask,
+  deleteImplementationTask,
+} from '@/lib/actions/tasks-impl'
 import { PROJECT_STATUS, deliveryCountdown, formatDate, isOverdue } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { ScopeItem, ScopeStatus } from '@/lib/queries/opportunity-detail'
@@ -247,6 +254,31 @@ export function ImplementationDetail({
           )}
         </div>
 
+        {/* Card destacado de tempo restante (atrasado em vermelho). */}
+        {dueDate && phaseStatus !== 'entregue' && (
+          <div
+            className={cn(
+              'flex items-center gap-2.5 rounded-lg border p-3',
+              overdue
+                ? 'border-red-200 bg-red-50 dark:border-red-500/30 dark:bg-red-500/10'
+                : 'border-border bg-muted/40',
+            )}
+          >
+            <Clock
+              className={cn(
+                'h-5 w-5 shrink-0',
+                overdue ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground',
+              )}
+            />
+            <div>
+              <p className="text-xs text-muted-foreground">Tempo restante</p>
+              <p className={cn('text-sm font-semibold', overdue && 'text-red-600 dark:text-red-400')}>
+                {deliveryCountdown(dueDate)}
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Stepper + botão "Mover de fase" */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-1">
@@ -318,9 +350,18 @@ export function ImplementationDetail({
         </div>
       </header>
 
-      {/* Kanban de tarefas */}
+      {/* Kanban de tarefas (real, persistido por project_id). Coluna Concluída já
+          aplica o "máx. 5 + Ver todos + line-through" do helper compartilhado (B2). */}
       <SectionCard title="Tarefas">
-        <TasksKanban tasks={tasks} />
+        <TasksKanban
+          tasks={tasks}
+          handlers={{
+            onCreate: (draft) => createImplementationTask(projectId, draft),
+            onUpdate: (id, draft) => updateImplementationTask(projectId, id, draft),
+            onMove: (id, status) => moveImplementationTask(projectId, id, status),
+            onDelete: (id) => deleteImplementationTask(projectId, id),
+          }}
+        />
       </SectionCard>
 
       {/* Escopo contratado — persiste no banco ao mudar */}
