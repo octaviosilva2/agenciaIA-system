@@ -6,6 +6,7 @@
     "dev": "next dev --webpack",
     "build": "next build",
     "start": "next start",
+    "usar": "next build && next start",
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest"
