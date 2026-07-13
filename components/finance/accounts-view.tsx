@@ -101,7 +101,7 @@ export function AccountsView({
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('todos')
   const [situacaoFilter, setSituacaoFilter] = useState<SituacaoFilter>('todos')
   const [editingRow, setEditingRow] = useState<AccountRow | null>(null)
-  const [, startTransition] = useTransition()
+  const [isSaving, startTransition] = useTransition()
   const { from, to } = usePeriodDates()
 
   // Recortes da aba ativa.
@@ -342,6 +342,7 @@ export function AccountsView({
                 <AccountTableRow
                   key={`${row.type}-${row.data.id}`}
                   row={row}
+                  disabled={isSaving}
                   showPaidDate={!isPending}
                   onTogglePaid={
                     row.type === 'receber'
@@ -378,12 +379,15 @@ export function AccountsView({
 function AccountTableRow({
   row,
   showPaidDate,
+  disabled,
   onTogglePaid,
   onEdit,
   onDelete,
 }: {
   row: AccountRow
   showPaidDate: boolean
+  /** Desabilita as ações da linha enquanto outra mutação está em andamento (feedback visual). */
+  disabled: boolean
   /** `date` ('yyyy-MM-dd') ao marcar pago (default hoje); ausente ao reverter. */
   onTogglePaid: (date?: string) => void
   onEdit: () => void
@@ -407,7 +411,9 @@ function AccountTableRow({
     type === 'pagar' ? `− ${formatCurrency(data.amount)}` : formatCurrency(data.amount)
 
   return (
-    <tr className="h-9 border-b border-border last:border-0 hover:bg-accent">
+    <tr
+      className={`h-9 border-b border-border last:border-0 hover:bg-accent ${disabled ? 'opacity-50' : ''}`}
+    >
       <td className="px-3 py-2">
         <p className="font-medium leading-tight">{data.description}</p>
         {supplierLabel && <p className="text-xs text-muted-foreground">{supplierLabel}</p>}
@@ -457,8 +463,9 @@ function AccountTableRow({
           <button
             type="button"
             onClick={() => onTogglePaid()}
+            disabled={disabled}
             title={type === 'pagar' ? 'Desmarcar pagamento' : 'Desmarcar recebimento'}
-            className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground"
+            className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground disabled:cursor-not-allowed"
           >
             <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
             {type === 'pagar' ? 'Pago' : 'Recebido'}
@@ -471,8 +478,9 @@ function AccountTableRow({
             trigger={
               <button
                 type="button"
+                disabled={disabled}
                 aria-label={type === 'pagar' ? 'Marcar como pago' : 'Marcar como recebido'}
-                className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground hover:text-foreground"
+                className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground hover:text-foreground disabled:cursor-not-allowed"
               >
                 <Circle className="h-4 w-4" />
                 {type === 'pagar' ? 'Pago' : 'Recebido'}
@@ -488,7 +496,8 @@ function AccountTableRow({
           <button
             type="button"
             onClick={onEdit}
-            className="cursor-pointer rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            disabled={disabled}
+            className="cursor-pointer rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed"
             aria-label="Editar conta"
           >
             <Pencil className="h-3.5 w-3.5" />
@@ -496,7 +505,8 @@ function AccountTableRow({
           <button
             type="button"
             onClick={onDelete}
-            className="cursor-pointer rounded p-1 text-muted-foreground transition-colors hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-500/15 dark:hover:text-red-400"
+            disabled={disabled}
+            className="cursor-pointer rounded p-1 text-muted-foreground transition-colors hover:bg-red-100 hover:text-red-600 disabled:cursor-not-allowed dark:hover:bg-red-500/15 dark:hover:text-red-400"
             aria-label="Excluir conta"
           >
             <Trash2 className="h-3.5 w-3.5" />

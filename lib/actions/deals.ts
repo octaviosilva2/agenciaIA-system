@@ -430,15 +430,56 @@ export async function unarchiveProject(dealId: string): Promise<ActionState> {
 }
 
 /**
- * Exclui um projeto PERMANENTEMENTE: apaga o(s) project(s) vinculado(s) e o deal.
- * (Deletar o deal só faria SET NULL em projects.deal_id, então removemos os projects antes.)
+ * Exclui um projeto PERMANENTEMENTE: apaga tarefas, cobranças, contas a pagar e
+ * contrato ligados ao(s) project(s), depois o(s) project(s) e o deal.
+ * (As FKs de projects/contracts para essas tabelas são ON DELETE SET NULL — feitas
+ * assim de propósito para não perder histórico em edições normais — então aqui,
+ * que é exclusão definitiva, cada uma precisa ser apagada explicitamente. Senão
+ * viram registros órfãos que continuam aparecendo no Financeiro.)
  */
 export async function deleteProject(dealId: string): Promise<ActionState> {
   const supabase = await createClient()
+
+  const { data: projects, error: projFetchErr } = await supabase
+    .from('projects')
+    .select('id')
+    .eq('deal_id', dealId)
+  if (projFetchErr) return { success: false, message: `Erro ao excluir: ${projFetchErr.message}` }
+  const projectIds = (projects ?? []).map((p) => p.id)
+
+  if (projectIds.length > 0) {
+    const { data: contracts, error: contractFetchErr } = await supabase
+      .from('contracts')
+      .select('id')
+      .in('project_id', projectIds)
+    if (contractFetchErr) return { success: false, message: `Erro ao excluir: ${contractFetchErr.message}` }
+    const contractIds = (contracts ?? []).map((c) => c.id)
+    const orFilter =
+      contractIds.length > 0
+        ? `project_id.in.(${projectIds.join(',')}),contract_id.in.(${contractIds.join(',')})`
+        : `project_id.in.(${projectIds.join(',')})`
+
+    const { error: taskErr } = await supabase.from('tasks').delete().or(orFilter)
+    if (taskErr) return { success: false, message: `Erro ao excluir tarefas: ${taskErr.message}` }
+
+    const { error: chargeErr } = await supabase.from('charges').delete().or(orFilter)
+    if (chargeErr) return { success: false, message: `Erro ao excluir cobranças: ${chargeErr.message}` }
+
+    const { error: payableErr } = await supabase
+      .from('accounts_payable')
+      .delete()
+      .in('project_id', projectIds)
+    if (payableErr) return { success: false, message: `Erro ao excluir contas a pagar: ${payableErr.message}` }
+
+    const { error: contractErr } = await supabase.from('contracts').delete().in('project_id', projectIds)
+    if (contractErr) return { success: false, message: `Erro ao excluir contrato: ${contractErr.message}` }
+  }
+
   const { error: pErr } = await supabase.from('projects').delete().eq('deal_id', dealId)
   if (pErr) return { success: false, message: `Erro ao excluir projeto: ${pErr.message}` }
   const { error } = await supabase.from('deals').delete().eq('id', dealId)
   if (error) return { success: false, message: `Erro ao excluir: ${error.message}` }
   revalidateProjectBoards()
+  revalidatePath('/financeiro')
   return { success: true, message: 'Projeto excluído permanentemente.' }
 }
