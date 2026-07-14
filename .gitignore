@@ -45,3 +45,7 @@ supabase/.temp/
 
 # logs de desenvolvimento local
 dev.log
+
+# plano interno de descontinuação/reconstrução (não faz parte do portfólio público)
+PLANO-RECONSTRUCAO.md
+spec-reconstrucao/
