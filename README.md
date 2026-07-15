@@ -8,6 +8,17 @@ Internal CRM built to run the full operating cycle of a 2-partner AI implementat
 
 ## English
 
+## Project snapshot
+
+| Item | Information |
+|---|---|
+| **Status** | Internal tool |
+| **My role** | Primary builder — business rules, product structure, implementation and testing |
+| **Collaboration** | Solo (built for a 2-partner agency) |
+| **Outcome** | Full operating-cycle CRM in one tool: sales pipeline → delivery → maintenance retainers → finance |
+| **Stack** | Next.js 15 · React 19 · TypeScript (strict) · Tailwind v4 · shadcn/ui · Supabase · Zod · Vitest |
+| **Privacy** | No real client or usage data; migrations are schema-only |
+
 ### What it is
 
 A CRM built for internal use by a 2-partner agency that implements AI solutions for clients. It manages the full cycle: strategic planning (a lightweight OKR-like layer), sales pipeline (contact → deal → project), delivery (implementation + ongoing maintenance retainers), and finance (receivables/payables) — all in one system, modeled around this specific agency's actual revenue structure (one-time implementation fee + optional monthly retainer), not a generic SaaS CRM's assumptions (no multi-tenant, no billing engine, no built-in AI features).
